@@ -65,9 +65,13 @@ def create_or_update_record(validated_data, model_name, create=True):
     logger.debug(
         f"Creating/Updating record for model {model_name} with data: {validated_data}"
     )
-
     Model = apps.get_model("restapi", model_name)
     SerializerClass = serializers_dict[model_name]
+
+    print(f"Create: {create}")
+    print(f"Model: {Model}")
+    print(f"Serializer: {SerializerClass}")
+    print(f"Data: {validated_data}")
 
     if create:
         serializer = SerializerClass(data=validated_data)
@@ -79,6 +83,7 @@ def create_or_update_record(validated_data, model_name, create=True):
         serializer.save()
         return serializer.data
     else:
+        print(f"Serializer errors: {serializer.errors}")
         logger.error(f"Serializer errors: {serializer.errors}")
         return serializer.errors
 

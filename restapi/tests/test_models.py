@@ -1,9 +1,8 @@
 import datetime
-from time import sleep
 from django.test import TestCase
 from restapi.factories import *
 from restapi.models import *
-from unittest.mock import patch
+from agendable import celery_app
 
 
 class UserModelTest(TestCase):
@@ -27,8 +26,11 @@ class UserModelTest(TestCase):
 
 class MeetingModelTest(TestCase):
     @classmethod
-    def setUpTestData(cls):
-        cls.meeting = MeetingFactory()
+    def setUp(self):
+        celery_app.conf.update(
+            CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True
+        )
+        self.meeting = MeetingFactory()
 
     def test_meeting_title(self):
         self.assertTrue(isinstance(self.meeting.title, str))
@@ -47,18 +49,11 @@ class MeetingModelTest(TestCase):
         self.assertEqual(self.meeting.num_reschedules, 0)
 
     def test_get_next_occurrence(self):
-        # Mock the asynchronous task to create a new meeting
-        with patch("restapi.tasks.create_or_update_record.delay") as mock_task:
-            mock_task.side_effect = lambda meeting_data, model_name, create: (
-                Meeting.objects.create(**meeting_data) if create else None
-            )
-
-            # Test get_next_occurrence on the existing meeting
-            next_meeting = self.meeting.get_next_occurrence()
-            self.assertIsNone(next_meeting, "Expected no next meeting yet")
-
-            # Test get_next_occurrence again
-            next_meeting = self.meeting.get_next_occurrence()
+        # Test get_next_occurrence on the existing meeting
+        next_meeting = self.meeting.get_next_occurrence()
+        self.assertIsNone(next_meeting, "Expected no next meeting yet")
+        # Test get_next_occurrence again
+        next_meeting = self.meeting.get_next_occurrence()
 
         self.assertIsNotNone(next_meeting, "Expected to find the next meeting")
         self.assertEqual(next_meeting.recurrence, self.meeting.recurrence)

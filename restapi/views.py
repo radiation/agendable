@@ -35,6 +35,7 @@ RELATIONS_MODEL_MAPPING = {
     "meeting": Meeting,
     "task": Task,
     "user": CustomUser,
+    "recurrence": MeetingRecurrence,
 }
 
 MODEL_SERIALIZER_MAPPING = {
@@ -111,15 +112,52 @@ class MeetingViewSet(AsyncModelViewSet):
     def get_meeting_recurrence(self, request):
         meeting_id = request.query_params.get("meeting_id")
         recurrence = MeetingRecurrence.objects.get(meeting__id=meeting_id)
-        return Response(recurrence)
+        serializer = MeetingRecurrenceSerializer(recurrence)
+        return Response(serializer.data)
 
-    # Returns a Meeting object
+    # Returns a serialized Meeting object
     @action(detail=False, methods=["GET"])
     def get_next_occurrence(self, request):
         meeting_id = request.query_params.get("meeting_id")
         meeting = Meeting.objects.get(pk=meeting_id)
-        next_occurrence = meeting.get_next_occurrence()
-        return Response(next_occurrence)
+        next_meeting = meeting.get_next_occurrence()
+
+        if next_meeting is None:
+            return Response(
+                {"message": "Next occurrence is being scheduled"},
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        serializer = MeetingSerializer(next_meeting)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def add_recurrence(self, request, pk=None):
+        meeting = self.get_object()
+        recurrence_data = request.data.get("recurrence")
+
+        print(f"Recurrence data: {recurrence_data}")
+
+        # Parse recurrence_data if it's a string
+        if isinstance(recurrence_data, str) or isinstance(recurrence_data, int):
+            # Convert recurrence_data to a dict
+            recurrence_data = {"id": recurrence_data}
+
+        # Validate the recurrence data
+        recurrence_serializer = MeetingRecurrenceSerializer(data=recurrence_data)
+        if recurrence_serializer.is_valid():
+            validated_data = recurrence_serializer.validated_data
+            validated_data["meeting_id"] = meeting.id
+
+            create_or_update_record.delay(
+                validated_data, "MeetingRecurrence", create=True
+            )
+
+            return Response({"status": "recurrence set"}, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                recurrence_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
 
     # Move tasks and agenda items to the next occurrence
     @action(detail=False, methods=["POST"])
@@ -132,6 +170,7 @@ class MeetingViewSet(AsyncModelViewSet):
         meeting = self.get_object()
         recurrence_id = request.data.get("recurrence")
 
+        print(f"Recurrence ID: {recurrence_id}")
         # Fetch the existing MeetingRecurrence instance
         if recurrence_id is not None:
             recurrence = get_object_or_404(MeetingRecurrence, pk=recurrence_id)

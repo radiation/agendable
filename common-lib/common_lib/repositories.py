@@ -4,8 +4,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from logging_config import logger
-from models import Base
+from common_lib.logging_config import logger
+from common_lib.models import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
 

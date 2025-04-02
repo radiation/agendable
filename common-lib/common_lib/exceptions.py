@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable, TypeVar, Union, cast
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
-from logging_config import logger
+from common_lib.logging_config import logger
 
 T = TypeVar("T", bound=Callable[..., Awaitable[Any]])
 

@@ -4,11 +4,11 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from logging_config import logger
-from redis_client import RedisClient
-from models import Base
-from repositories import BaseRepository
-from exceptions import NotFoundError
+from common_lib.logging_config import logger
+from common_lib.redis_client import RedisClient
+from common_lib.models import Base
+from common_lib.repositories import BaseRepository
+from common_lib.exceptions import NotFoundError
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)

@@ -31,7 +31,7 @@ from app.services.user_service import UserService
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest.fixture(name="engine", scope="session")
+@pytest.fixture(name="engine", scope="function")
 async def _engine():
     """Create a new test database for the entire test session"""
     _engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -65,12 +65,9 @@ async def _db_session(engine):
     await engine.dispose()
 
 
-@pytest.fixture(name="mock_redis_client")
-async def _mock_redis_client():
-    """Mock Redis client for testing"""
-    mock = AsyncMock()
-    mock.publish = AsyncMock()
-    return mock
+@pytest.fixture
+def mock_redis_client() -> AsyncMock:
+    return AsyncMock()
 
 
 @pytest.fixture

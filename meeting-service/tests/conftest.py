@@ -16,7 +16,7 @@ from app.core.dependencies import (
     get_user_service,
 )
 from app.db.db import get_db
-from app.db.models import Base
+from common_lib.models import Base
 from app.db.repositories.meeting_repo import MeetingRepository
 from app.db.repositories.recurrence_repo import RecurrenceRepository
 from app.db.repositories.task_repo import TaskRepository

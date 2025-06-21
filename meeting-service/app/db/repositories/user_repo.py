@@ -3,11 +3,11 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.core.logging_config import logger
+from common_lib.logging_config import logger
 from app.db.models.meeting import Meeting
 from app.db.models.relationships import meeting_users
 from app.db.models.user import User
-from app.db.repositories.base_repo import BaseRepository
+from common_lib.repositories import BaseRepository
 
 
 class UserRepository(BaseRepository[User]):

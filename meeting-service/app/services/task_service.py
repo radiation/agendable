@@ -1,13 +1,13 @@
 from typing import Optional
 from uuid import UUID
 
-from app.core.logging_config import logger
-from app.core.redis_client import RedisClient
+from common_lib.logging_config import logger
+from common_lib.redis_client import RedisClient
 from app.db.models.task import Task
 from app.db.repositories.task_repo import TaskRepository
-from app.exceptions import NotFoundError
+from common_lib.exceptions import NotFoundError
 from app.schemas.task_schemas import TaskCreate, TaskRetrieve, TaskUpdate
-from app.services import BaseService
+from common_lib.services import BaseService
 
 
 class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):

@@ -1,6 +1,6 @@
 import pytest
 
-from app.exceptions import NotFoundError
+from common_lib.exceptions import NotFoundError
 from app.schemas.recurrence_schemas import RecurrenceUpdate
 from tests.factories import RecurrenceCreateFactory
 

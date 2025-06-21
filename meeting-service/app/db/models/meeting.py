@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, relationship
 import sqlalchemy.sql.functions as func
 
-from . import Base
+from common_lib.models import Base
 from .relationships import meeting_tasks, meeting_users
 
 

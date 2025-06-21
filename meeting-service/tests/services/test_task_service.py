@@ -1,6 +1,6 @@
 import pytest
 
-from app.exceptions import NotFoundError
+from common_lib.exceptions import NotFoundError
 from app.schemas.task_schemas import TaskUpdate
 from tests.factories import TaskCreateFactory
 

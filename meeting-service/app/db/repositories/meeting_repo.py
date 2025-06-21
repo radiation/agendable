@@ -7,12 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 
-from app.core.logging_config import logger
+from common_lib.logging_config import logger
 from app.db.models.meeting import Meeting
 from app.db.models.recurrence import Recurrence
 from app.db.models.relationships import meeting_users
 from app.db.models.user import User
-from app.db.repositories import BaseRepository
+from common_lib.repositories import BaseRepository
 from app.schemas.meeting_schemas import MeetingCreate
 
 

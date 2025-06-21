@@ -1,7 +1,7 @@
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Table, text
 from sqlalchemy.dialects.postgresql import UUID
 
-from . import Base
+from common_lib.models import Base
 
 meeting_tasks = Table(
     "meeting_tasks",

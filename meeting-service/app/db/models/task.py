@@ -2,7 +2,7 @@ from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
 from sqlalchemy.orm import relationship
 import sqlalchemy.sql.functions as func
 
-from . import Base
+from common_lib.models import Base
 from .relationships import meeting_tasks
 
 

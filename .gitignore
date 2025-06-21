@@ -175,3 +175,8 @@ cython_debug/
 
 # Misc
 */logs/
+
+# Ignore all vscode files except settings
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

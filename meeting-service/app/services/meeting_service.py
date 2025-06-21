@@ -4,14 +4,14 @@ from uuid import UUID
 
 from sqlalchemy import Column
 
-from app.core.logging_config import logger
-from app.core.redis_client import RedisClient
+from common_lib.logging_config import logger
+from common_lib.redis_client import RedisClient
 from app.db.models.meeting import Meeting
 from app.db.repositories.meeting_repo import MeetingRepository
-from app.exceptions import NotFoundError, ValidationError
+from common_lib.exceptions import NotFoundError, ValidationError
 from app.schemas.meeting_schemas import MeetingCreate, MeetingRetrieve, MeetingUpdate
 from app.schemas.user_schemas import UserRetrieve
-from app.services import BaseService
+from common_lib.services import BaseService
 
 
 class MeetingService(BaseService[Meeting, MeetingCreate, MeetingUpdate]):

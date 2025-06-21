@@ -1,10 +1,10 @@
 from typing import Optional
 
-from app.core.redis_client import RedisClient
+from common_lib.redis_client import RedisClient
 from app.db.models.user import User
 from app.db.repositories.user_repo import UserRepository
 from app.schemas.user_schemas import UserCreate, UserUpdate
-from app.services.base_service import BaseService
+from common_lib.services import BaseService
 
 
 class UserService(BaseService[User, UserCreate, UserUpdate]):

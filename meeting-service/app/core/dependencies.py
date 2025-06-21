@@ -4,7 +4,7 @@ from fastapi import Depends
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from redis_client import RedisClient, redis_client
+from common_lib.redis_client import RedisClient, redis_client
 from app.db.db import get_db
 from app.db.repositories.meeting_repo import MeetingRepository
 from app.db.repositories.recurrence_repo import RecurrenceRepository

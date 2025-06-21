@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 
 from app.core.decorators import log_execution_time
 from app.core.dependencies import get_task_service
-from app.core.logging_config import logger
-from app.exceptions import NotFoundError, handle_service_exceptions
+from common_lib.logging_config import logger
+from common_lib.exceptions import NotFoundError, handle_service_exceptions
 from app.schemas.task_schemas import TaskCreate, TaskRetrieve, TaskUpdate
 from app.services.task_service import TaskService
 

@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.recurrence import Recurrence
-from app.db.repositories import BaseRepository
+from common_lib.repositories import BaseRepository
 
 
 class RecurrenceRepository(BaseRepository[Recurrence]):

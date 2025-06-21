@@ -5,9 +5,9 @@ from sqlalchemy import Column, DateTime, Index, Integer, String
 from sqlalchemy.orm import relationship
 import sqlalchemy.sql.functions as func
 
-from app.core.logging_config import logger
+from common_lib.logging_config import logger
 
-from . import Base
+from common_lib.models import Base
 
 
 class Recurrence(Base):

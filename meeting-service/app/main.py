@@ -15,8 +15,8 @@ from app.core.dependencies import (
     get_task_service,
     get_user_service,
 )
-from app.core.logging_config import logger
-from app.exceptions import (
+from common_lib.logging_config import logger
+from common_lib.exceptions import (
     NotFoundError,
     ValidationError,
     generic_exception_handler,

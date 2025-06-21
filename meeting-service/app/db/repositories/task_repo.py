@@ -6,10 +6,10 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.core.logging_config import logger
+from common_lib.logging_config import logger
 from app.db.models.relationships import meeting_tasks, task_assignees
 from app.db.models.task import Task
-from app.db.repositories import BaseRepository
+from common_lib.repositories import BaseRepository
 
 
 class TaskRepository(BaseRepository[Task]):

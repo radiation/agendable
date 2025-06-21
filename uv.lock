@@ -9,6 +9,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "async-asgi-testclient" },
     { name = "asyncpg" },
+    { name = "common-lib" },
     { name = "coverage" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -31,6 +32,7 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.21.0" },
     { name = "async-asgi-testclient", specifier = ">=1.4.11" },
     { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "common-lib", specifier = ">=0.1.3" },
     { name = "coverage", specifier = ">=7.7.0" },
     { name = "fastapi", specifier = ">=0.115.11" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -164,6 +166,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
+]
+
+[[package]]
+name = "common-lib"
+version = "0.1.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/b2/3e73bcc171b6c9453a2a469ed28c153af968d2d358c1c99f421525763518/common-lib-0.1.3.tar.gz", hash = "sha256:31a70f5120b28d0a95d0ecba67c187e39f38e72a2585c81ec5a942125804f1f3", size = 1476 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4e/e6/a1241d9079cd7b6c3b2e468b78b55ac97a2136883d402c29dc1fdeb0317b/common_lib-0.1.3-py3-none-any.whl", hash = "sha256:9f7b4ad8f6ff44d7c95e21e87ce34104e4e9da0134440a9af7b8e06d0c763059", size = 2713 },
 ]
 
 [[package]]

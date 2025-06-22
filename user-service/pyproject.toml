@@ -1,25 +1,27 @@
+[build-system]
+requires = [
+  "uv>=0.4.0",
+  "hatchling>=1.16.0"
+]
+build-backend = "hatchling.build"
+
 [project]
 name = "agendable-user-service"
 version = "0.1.0"
 description = "Agendable User Service"
-readme = "README.md"
+readme = "../README.md"
 requires-python = ">=3.13"
+
 dependencies = [
-    "common-lib @ file://../common-lib",
-    "asyncpg",
-    "fastapi",
-    "greenlet",
-    "httpx",
-    "loguru",
-    "passlib[bcrypt]>=1.7.4",
-    "python-jose>=3.4.0",
-    "psycopg2-binary",
-    "pydantic",
-    "pydantic-settings",
-    "redis",
-    "sqlalchemy",
-    "uvicorn[standard]"
+  "common-lib",
+  "passlib[bcrypt]>=1.7.4",
+  "pydantic[email]>=2.10.6",
+  "python-jose>=3.5.0",
 ]
+
+[tool.hatch.build]
+packages = []
+include = ["app"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -31,6 +33,6 @@ known_first_party = ["app"]
 
 [tool.ruff]
 exclude = [
-    "**/__init__.py",
-    "**/alembic/versions/**"
+  "**/__init__.py",
+  "**/alembic/versions/**",
 ]

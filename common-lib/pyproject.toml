@@ -1,13 +1,6 @@
 [project]
 name = "common-lib"
 version = "0.1.0"
-dependencies = [
-    "fastapi",
-    "loguru",
-    "pydantic",
-    "redis",
-    "sqlalchemy"
-]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

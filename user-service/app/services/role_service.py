@@ -1,8 +1,8 @@
-from app.core.redis_client import RedisClient
+from common_lib.redis_client import RedisClient
 from app.db.models import Role
 from app.db.repositories.role_repo import RoleRepository
 from app.schemas.roles import RoleCreate, RoleUpdate
-from app.services.base_service import BaseService
+from common_lib.services import BaseService
 
 
 class RoleService(BaseService[Role, RoleCreate, RoleUpdate]):

@@ -1,8 +1,8 @@
-from app.core.redis_client import RedisClient
+from common_lib.redis_client import RedisClient
 from app.db.models import Group
 from app.db.repositories.group_repo import GroupRepository
 from app.schemas.groups import GroupCreate, GroupUpdate
-from app.services.base_service import BaseService
+from common_lib.services import BaseService
 
 
 class GroupService(BaseService[Group, GroupCreate, GroupUpdate]):

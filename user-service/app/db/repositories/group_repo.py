@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Group
-from app.db.repositories.base_repo import BaseRepository
+from common_lib.repositories import BaseRepository
 
 
 class GroupRepository(BaseRepository[Group]):

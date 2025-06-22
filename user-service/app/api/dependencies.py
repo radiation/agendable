@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from jose import JWTError, jwt
 
-from app.core.redis_client import redis_client
+from common_lib.redis_client import redis_client
 from app.core.security import oauth2_scheme
 from app.core.settings import settings
 from app.db.repositories.group_repo import GroupRepository

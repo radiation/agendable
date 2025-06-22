@@ -20,7 +20,7 @@ from app.services.user_service import UserService
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest.fixture(name="engine", scope="session")
+@pytest.fixture(name="engine", scope="function")
 async def _engine():
     # Create an in-memory SQLite engine
     _engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -38,8 +38,8 @@ async def tables(engine):
 
 
 @pytest.fixture(name="db_session", scope="function")
-async def _db_session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+async def _db_session(engine):
+    """Create a new test session for each test function"""
     async_session_factory = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
@@ -51,6 +51,11 @@ async def _db_session():
         yield session
 
     await engine.dispose()
+
+
+@pytest.fixture
+def mock_redis_client() -> AsyncMock:
+    return AsyncMock()
 
 
 @pytest.fixture
@@ -73,13 +78,6 @@ async def test_client(db_session, mock_redis_client):
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         yield client
-
-
-@pytest.fixture(name="mock_redis_client")
-async def _mock_redis_client():
-    mock = AsyncMock()
-    mock.publish = AsyncMock()
-    return mock
 
 
 @pytest.fixture

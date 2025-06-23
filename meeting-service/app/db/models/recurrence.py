@@ -1,13 +1,11 @@
 from datetime import datetime, timedelta
 
-from dateutil.rrule import rrulestr
-from sqlalchemy import Column, DateTime, Index, Integer, String
-from sqlalchemy.orm import relationship
-import sqlalchemy.sql.functions as func
-
 from common_lib.logging_config import logger
-
 from common_lib.models import Base
+from dateutil.rrule import rrulestr
+from sqlalchemy import DateTime, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+import sqlalchemy.sql.functions as func
 
 
 class Recurrence(Base):
@@ -27,10 +25,12 @@ class Recurrence(Base):
         Index("ix_recurrence_created_at", "created_at"),
     )
 
-    id = Column(Integer, primary_key=True)
-    title = Column(String(100), default="")
-    rrule = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(100), default="")
+    rrule: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     meetings = relationship("Meeting", back_populates="recurrence")
 

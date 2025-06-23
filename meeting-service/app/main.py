@@ -4,6 +4,14 @@ from contextlib import asynccontextmanager
 import os
 from typing import AsyncIterator
 
+from common_lib.exceptions import (
+    NotFoundError,
+    ValidationError,
+    generic_exception_handler,
+    not_found_exception_handler,
+    validation_exception_handler,
+)
+from common_lib.logging_config import logger
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from redis.asyncio import Redis
@@ -15,14 +23,6 @@ from app.core.dependencies import (
     get_task_service,
     get_user_service,
 )
-from common_lib.logging_config import logger
-from common_lib.exceptions import (
-    NotFoundError,
-    ValidationError,
-    generic_exception_handler,
-    not_found_exception_handler,
-    validation_exception_handler,
-)
 from app.services.redis_subscriber import RedisSubscriber
 
 load_dotenv()
@@ -31,7 +31,7 @@ logger.info("Starting application...")
 
 
 # redis-py isn't statically typed, so we skip mypy checks
-async def test_redis_connection(redis_client: Redis) -> None:  # type: ignore
+async def test_redis_connection(redis_client: Redis) -> None:
     try:
         pong = await redis_client.ping()
         if pong:

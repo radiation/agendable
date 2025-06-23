@@ -1,13 +1,13 @@
 import json
 from typing import Any, Type, TypeVar
 
+from common_lib.exceptions import ValidationError
+from common_lib.logging_config import logger
 from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 
-from common_lib.logging_config import logger
-from common_lib.exceptions import ValidationError
 from app.schemas.user_schemas import UserCreate, UserUpdate
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
@@ -18,7 +18,7 @@ T = TypeVar("T", bound=BaseModel)
 class RedisSubscriber:
     def __init__(
         self,
-        redis_client: Redis,  # type: ignore
+        redis_client: Redis,
         task_service: TaskService,
         user_service: UserService,
     ) -> None:

@@ -1,20 +1,12 @@
+from datetime import datetime
 from typing import cast
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    event,
-)
+from common_lib.models import Base
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, event
 from sqlalchemy.engine import Connection
-from sqlalchemy.orm import Mapper, relationship
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 import sqlalchemy.sql.functions as func
 
-from common_lib.models import Base
 from .relationships import meeting_tasks, meeting_users
 
 
@@ -26,17 +18,21 @@ class Meeting(Base):
         Index("ix_meeting_completed", "completed"),
     )
 
-    id = Column(Integer, primary_key=True)
-    recurrence_id = Column(Integer, ForeignKey("recurrences.id"), nullable=True)
-    title = Column(String(100), default="")
-    start_date = Column(DateTime(timezone=True))
-    duration = Column(Integer, default=30)
-    location = Column(String(100), default="")
-    notes = Column(String)
-    num_reschedules = Column(Integer, default=0)
-    reminder_sent = Column(Boolean, default=False)
-    completed = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recurrence_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("recurrences.id"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(100), default="")
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    duration: Mapped[int] = mapped_column(Integer, default=30)
+    location: Mapped[str] = mapped_column(String(100), default="")
+    notes: Mapped[str] = mapped_column(String)
+    num_reschedules: Mapped[int] = mapped_column(Integer, default=0)
+    reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     # Relationships
     recurrence = relationship("Recurrence", back_populates="meetings", lazy="joined")
@@ -53,4 +49,4 @@ def receive_before_save(
     if not target.title and target.recurrence:
         new_title = f"{target.recurrence.title} on "
         new_title += f"{target.start_date.strftime('%Y-%m-%d')}"
-        target.title = cast(Column[str], new_title)
+        target.title = cast(Mapped[str], new_title)

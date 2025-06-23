@@ -2,16 +2,16 @@ from datetime import datetime, timedelta
 from typing import Optional, cast
 from uuid import UUID
 
-from sqlalchemy import Column
-
+from common_lib.exceptions import NotFoundError, ValidationError
 from common_lib.logging_config import logger
 from common_lib.redis_client import RedisClient
+from common_lib.services import BaseService
+from sqlalchemy import Column
+
 from app.db.models.meeting import Meeting
 from app.db.repositories.meeting_repo import MeetingRepository
-from common_lib.exceptions import NotFoundError, ValidationError
 from app.schemas.meeting_schemas import MeetingCreate, MeetingRetrieve, MeetingUpdate
 from app.schemas.user_schemas import UserRetrieve
-from common_lib.services import BaseService
 
 
 class MeetingService(BaseService[Meeting, MeetingCreate, MeetingUpdate]):
@@ -79,12 +79,12 @@ class MeetingService(BaseService[Meeting, MeetingCreate, MeetingUpdate]):
                 detail=f"Meeting {meeting_id} does not have a recurrence set"
             )
 
-        after_date = cast(datetime, meeting.start_date) + timedelta(
+        after_date = meeting.start_date + timedelta(
             minutes=cast(float, meeting.duration)
         )
 
         # Fetch subsequent meetings
-        recurrence_id = cast(int, meeting.recurrence_id)
+        recurrence_id = meeting.recurrence_id
         next_meeting = await self.repo.get_future_meetings(
             recurrence_id=recurrence_id, after_date=after_date
         )
@@ -108,13 +108,13 @@ class MeetingService(BaseService[Meeting, MeetingCreate, MeetingUpdate]):
             )
 
         # Fetch recurrence and generate next date
-        recurrence_id = cast(int, meeting.recurrence_id)
+        recurrence_id = meeting.recurrence_id
         recurrence = await self.repo.get_recurrence_by_id(recurrence_id)
         if not recurrence:
             logger.warning(f"Recurrence with ID {recurrence_id} not found")
             raise NotFoundError(detail=f"Recurrence with ID {recurrence_id} not found")
 
-        start_date = cast(datetime, meeting.start_date)
+        start_date = meeting.start_date
         next_meeting_date = recurrence.get_next_date(start_date=start_date)
 
         if not next_meeting_date:

@@ -4,8 +4,8 @@ from uuid import UUID
 
 from common_lib.exceptions import NotFoundError, ValidationError
 from common_lib.logging_config import logger
-from common_lib.redis_client import RedisClient
 from common_lib.services import BaseService
+from redis.asyncio import Redis
 from sqlalchemy import Column
 
 from app.db.models.meeting import Meeting
@@ -16,7 +16,7 @@ from app.schemas.user_schemas import UserRetrieve
 
 class MeetingService(BaseService[Meeting, MeetingCreate, MeetingUpdate]):
     def __init__(
-        self, repo: MeetingRepository, redis_client: Optional[RedisClient] = None
+        self, repo: MeetingRepository, redis_client: Optional[Redis] = None
     ) -> None:
         super().__init__(repo, redis_client=redis_client)
         self.repo: MeetingRepository = repo

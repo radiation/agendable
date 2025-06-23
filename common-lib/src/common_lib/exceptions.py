@@ -1,10 +1,9 @@
 import functools
 from typing import Any, Awaitable, Callable, TypeVar, Union, cast
 
+from common_lib.logging_config import logger
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
-
-from common_lib.logging_config import logger
 
 T = TypeVar("T", bound=Callable[..., Awaitable[Any]])
 
@@ -51,29 +50,41 @@ def handle_service_exceptions(func: T) -> T:
 
 # Exception Handlers
 def forbidden_exception_handler(
-    _request: Request, exc: ForbiddenError
+    _request: Request, exc: Exception
 ) -> Union[Response, Awaitable[Response]]:
+    if isinstance(exc, ForbiddenError):
+        detail = exc.detail
+    else:
+        detail = str(exc)
     return JSONResponse(
         status_code=403,
-        content={"detail": exc.detail},
+        content={"detail": detail},
     )
 
 
 def not_found_exception_handler(
-    _request: Request, exc: NotFoundError
+    _request: Request, exc: Exception
 ) -> Union[Response, Awaitable[Response]]:
+    if isinstance(exc, NotFoundError):
+        detail = exc.detail
+    else:
+        detail = str(exc)
     return JSONResponse(
         status_code=404,
-        content={"detail": exc.detail},
+        content={"detail": detail},
     )
 
 
 def validation_exception_handler(
-    _request: Request, exc: ValidationError
+    _request: Request, exc: Exception
 ) -> Union[Response, Awaitable[Response]]:
+    if isinstance(exc, ValidationError):
+        detail = exc.detail
+    else:
+        detail = str(exc)
     return JSONResponse(
         status_code=400,
-        content={"detail": exc.detail},
+        content={"detail": detail},
     )
 
 
@@ -82,5 +93,5 @@ def generic_exception_handler(
 ) -> Union[Response, Awaitable[Response]]:
     return JSONResponse(
         status_code=500,
-        content={"detail": exc or "An unexpected error occurred"},
+        content={"detail": str(exc) if exc else "An unexpected error occurred"},
     )

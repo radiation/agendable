@@ -1,10 +1,10 @@
 from typing import Optional
 
+from common_lib.redis_client import redis_client
 from fastapi import Depends
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common_lib.redis_client import RedisClient, redis_client
 from app.db.db import get_db
 from app.db.repositories.meeting_repo import MeetingRepository
 from app.db.repositories.recurrence_repo import RecurrenceRepository
@@ -28,7 +28,7 @@ def get_meeting_repo(db: AsyncSession = Depends(get_db)) -> MeetingRepository:
 
 def get_meeting_service(
     db: AsyncSession = Depends(get_db),
-    redis: Optional[RedisClient] = Depends(lambda: redis_client),
+    redis: Optional[Redis] = Depends(lambda: redis_client),
 ) -> MeetingService:
     meeting_repo = MeetingRepository(db)
     return MeetingService(meeting_repo, redis_client=redis)
@@ -42,7 +42,7 @@ def get_recurrence_repo(
 
 def get_recurrence_service(
     db: AsyncSession = Depends(get_db),
-    redis: Optional[RedisClient] = Depends(lambda: redis_client),
+    redis: Optional[Redis] = Depends(lambda: redis_client),
 ) -> RecurrenceService:
     recurrence_repo = RecurrenceRepository(db)
     return RecurrenceService(recurrence_repo, redis_client=redis)
@@ -54,7 +54,7 @@ def get_task_repo(db: AsyncSession = Depends(get_db)) -> TaskRepository:
 
 def get_task_service(
     db: AsyncSession = Depends(get_db),
-    redis: Optional[RedisClient] = Depends(lambda: redis_client),
+    redis: Optional[Redis] = Depends(lambda: redis_client),
 ) -> TaskService:
     task_repo = TaskRepository(db)
     return TaskService(task_repo, redis_client=redis)
@@ -66,7 +66,7 @@ def get_user_repo(db: AsyncSession = Depends(get_db)) -> UserRepository:
 
 def get_user_service(
     db: AsyncSession = Depends(get_db),
-    redis: Optional[RedisClient] = Depends(lambda: redis_client),
+    redis: Optional[Redis] = Depends(lambda: redis_client),
 ) -> UserService:
     user_repo = UserRepository(db)
     return UserService(user_repo, redis_client=redis)

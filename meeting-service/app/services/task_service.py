@@ -1,18 +1,19 @@
 from typing import Optional
 from uuid import UUID
 
+from common_lib.exceptions import NotFoundError
 from common_lib.logging_config import logger
-from common_lib.redis_client import RedisClient
+from common_lib.services import BaseService
+from redis.asyncio import Redis
+
 from app.db.models.task import Task
 from app.db.repositories.task_repo import TaskRepository
-from common_lib.exceptions import NotFoundError
 from app.schemas.task_schemas import TaskCreate, TaskRetrieve, TaskUpdate
-from common_lib.services import BaseService
 
 
 class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):
     def __init__(
-        self, repo: TaskRepository, redis_client: Optional[RedisClient] = None
+        self, repo: TaskRepository, redis_client: Optional[Redis] = None
     ) -> None:
         super().__init__(repo)
         self.repo: TaskRepository = repo

@@ -1,20 +1,20 @@
 from datetime import datetime
 from typing import Optional
 
-from dateutil.rrule import rrulestr
-
+from common_lib.exceptions import NotFoundError
 from common_lib.logging_config import logger
-from common_lib.redis_client import RedisClient
+from common_lib.services import BaseService
+from dateutil.rrule import rrulestr
+from redis.asyncio import Redis
+
 from app.db.models.recurrence import Recurrence
 from app.db.repositories.recurrence_repo import RecurrenceRepository
-from common_lib.exceptions import NotFoundError
 from app.schemas.recurrence_schemas import RecurrenceCreate, RecurrenceUpdate
-from common_lib.services import BaseService
 
 
 class RecurrenceService(BaseService[Recurrence, RecurrenceCreate, RecurrenceUpdate]):
     def __init__(
-        self, repo: RecurrenceRepository, redis_client: Optional[RedisClient] = None
+        self, repo: RecurrenceRepository, redis_client: Optional[Redis] = None
     ) -> None:
         super().__init__(repo, redis_client=redis_client)
 

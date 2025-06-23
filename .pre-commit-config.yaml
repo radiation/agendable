@@ -18,6 +18,30 @@ repos:
     hooks:
     -   id: isort
 
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.1
+    hooks:
+    -   id: mypy
+        name: mypy-common-lib
+        entry: mypy --config-file common-lib/mypy.ini
+        language: system
+        types: [python]
+        files: ^common-lib/
+
+    -   id: mypy
+        name: mypy-meeting-service
+        entry: mypy --config-file meeting-service/mypy.ini
+        language: system
+        types: [python]
+        files: ^meeting-service/
+
+    -   id: mypy
+        name: mypy-user-service
+        entry: mypy --config-file user-service/mypy.ini
+        language: system
+        types: [python]
+        files: ^user-service/
+
 # Disable pylint checks:
 # C0103 (invalid-name)
 # C0114 (missing-module-docstring)

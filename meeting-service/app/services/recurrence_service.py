@@ -35,6 +35,7 @@ class RecurrenceService(BaseService[Recurrence, RecurrenceCreate, RecurrenceUpda
                     {recurrence_id}: {next_meeting_date}"
             )
             return next_meeting_date
-        except StopIteration:
-            logger.warning(f"No meeting date found after {after_date}")
-            raise NotFoundError(detail=f"No meeting date found after {after_date}")
+        except StopIteration as exc:
+            raise NotFoundError(
+                detail=f"No meeting date found after {after_date}"
+            ) from exc

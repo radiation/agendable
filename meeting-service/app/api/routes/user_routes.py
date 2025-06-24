@@ -1,11 +1,11 @@
 from uuid import UUID
 
+from common_lib.exceptions import NotFoundError, handle_service_exceptions
+from common_lib.logging_config import logger
 from fastapi import APIRouter, Depends
 
 from app.core.decorators import log_execution_time
 from app.core.dependencies import get_user_service
-from common_lib.logging_config import logger
-from common_lib.exceptions import NotFoundError, handle_service_exceptions
 from app.schemas.user_schemas import UserCreate, UserRetrieve, UserUpdate
 from app.services.user_service import UserService
 

@@ -2,17 +2,17 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
+from common_lib.logging_config import logger
+from common_lib.repositories import BaseRepository
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 
-from common_lib.logging_config import logger
 from app.db.models.meeting import Meeting
 from app.db.models.recurrence import Recurrence
 from app.db.models.relationships import meeting_users
 from app.db.models.user import User
-from common_lib.repositories import BaseRepository
 from app.schemas.meeting_schemas import MeetingCreate
 
 

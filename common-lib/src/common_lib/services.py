@@ -39,8 +39,7 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         if not self.redis_client:
             logger.warning("Redis client not initialized. Skipping event publish")
             raise RuntimeError("Redis client not initialized")
-        else:
-            await self.redis_client.publish(channel, json.dumps(event, default=str))
+        await self.redis_client.publish(channel, json.dumps(event, default=str))
 
     async def create(self, create_data: CreateSchemaType) -> ModelType:
         logger.info(f"Creating {self.model_name} with data: {create_data.model_dump()}")

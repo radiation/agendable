@@ -2,12 +2,14 @@
 Fixtures for testing the FastAPI application
 """
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, cast
 from unittest.mock import AsyncMock
 
 from common_lib.models import Base
 from httpx import ASGITransport, AsyncClient
 import pytest
+from pytest import FixtureRequest
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -75,25 +77,27 @@ def mock_redis_client() -> AsyncMock:
 
 @pytest.fixture
 async def test_client(
-    db_session: AsyncSession, mock_redis_client: AsyncMock
+    db_session: AsyncSession, request: FixtureRequest
 ) -> AsyncGenerator[AsyncClient, None]:
     """Test client with dependency overrides for services"""
+    mock_obj = request.getfixturevalue("mock_redis_client")
+    mock_redis: Redis = cast(Redis, mock_obj)
     app.dependency_overrides[get_db] = lambda: db_session
 
     app.dependency_overrides[get_meeting_service] = lambda: MeetingService(
-        MeetingRepository(db_session), mock_redis_client
+        MeetingRepository(db_session), mock_redis
     )
 
     app.dependency_overrides[get_recurrence_service] = lambda: RecurrenceService(
-        RecurrenceRepository(db_session), mock_redis_client
+        RecurrenceRepository(db_session), mock_redis
     )
 
     app.dependency_overrides[get_task_service] = lambda: TaskService(
-        TaskRepository(db_session), mock_redis_client
+        TaskRepository(db_session), mock_redis
     )
 
     app.dependency_overrides[get_user_service] = lambda: UserService(
-        UserRepository(db_session), mock_redis_client
+        UserRepository(db_session), mock_redis
     )
 
     async with AsyncClient(
@@ -104,39 +108,47 @@ async def test_client(
 
 @pytest.fixture
 async def meeting_service(
-    db_session: AsyncSession, mock_redis_client: AsyncMock
+    db_session: AsyncSession, request: FixtureRequest
 ) -> MeetingService:
     """Create a new MeetingService instance for each test function"""
+    mock_obj = request.getfixturevalue("mock_redis_client")
+    mock_redis: Redis = cast(Redis, mock_obj)
     repo = MeetingRepository(db_session)
-    service = MeetingService(repo, mock_redis_client)
+    service = MeetingService(repo, mock_redis)
     return service
 
 
 @pytest.fixture
 async def recurrence_service(
-    db_session: AsyncSession, mock_redis_client: AsyncMock
+    db_session: AsyncSession, request: FixtureRequest
 ) -> RecurrenceService:
     """Create a new RecurrenceService instance for each test function"""
+    mock_obj = request.getfixturevalue("mock_redis_client")
+    mock_redis: Redis = cast(Redis, mock_obj)
     repo = RecurrenceRepository(db_session)
-    service = RecurrenceService(repo, mock_redis_client)
+    service = RecurrenceService(repo, mock_redis)
     return service
 
 
 @pytest.fixture
 async def task_service(
-    db_session: AsyncSession, mock_redis_client: AsyncMock
+    db_session: AsyncSession, request: FixtureRequest
 ) -> TaskService:
     """Create a new TaskService instance for each test function"""
+    mock_obj = request.getfixturevalue("mock_redis_client")
+    mock_redis: Redis = cast(Redis, mock_obj)
     repo = TaskRepository(db_session)
-    service = TaskService(repo, mock_redis_client)
+    service = TaskService(repo, mock_redis)
     return service
 
 
 @pytest.fixture
 async def user_service(
-    db_session: AsyncSession, mock_redis_client: AsyncMock
+    db_session: AsyncSession, request: FixtureRequest
 ) -> UserService:
     """Create a new UserService instance for each test function"""
+    mock_obj = request.getfixturevalue("mock_redis_client")
+    mock_redis: Redis = cast(Redis, mock_obj)
     repo = UserRepository(db_session)
-    service = UserService(repo, mock_redis_client)
+    service = UserService(repo, mock_redis)
     return service

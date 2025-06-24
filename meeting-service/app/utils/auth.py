@@ -1,8 +1,7 @@
 from typing import Optional
 
-from fastapi import Request
-
 from common_lib.exceptions import ForbiddenError
+from fastapi import Request
 
 
 def get_user_metadata(request: Request) -> dict[str, Optional[str]]:

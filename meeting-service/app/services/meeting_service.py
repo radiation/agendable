@@ -57,7 +57,7 @@ class MeetingService(BaseService[Meeting, MeetingCreate, MeetingUpdate]):
 
         # Mark meeting as complete
         meeting.completed = cast(Column[bool], True)
-        meeting = await self.repo.update(meeting)
+        meeting = await self.repo.update(meeting_id, meeting)
         logger.info(f"Successfully completed meeting with ID: {meeting_id}")
 
         return MeetingRetrieve.model_validate(meeting)

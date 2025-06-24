@@ -54,14 +54,15 @@ async def test_get_meeting_by_user(db_session):
 async def test_update_meeting(db_session):
     repo = MeetingRepository(db_session)
 
-    meeting_data = MeetingFactory.build()
-    created_meeting = await repo.create(meeting_data)
+    meeting_factory = MeetingFactory.build()
+    created_meeting = await repo.create(meeting_factory)
     assert created_meeting is not None
 
-    updated_data = Meeting(title="Updated Meeting", duration=120)
-    updated_meeting = await repo.update(updated_data)
-    assert updated_meeting.title == updated_data.title
-    assert updated_meeting.duration == updated_data.duration
+    updated_payload = MeetingFactory.build(title="Updated Meeting", duration=120)
+    updated_meeting = await repo.update(created_meeting.id, updated_payload)
+
+    assert updated_meeting.title == updated_payload.title
+    assert updated_meeting.duration == updated_payload.duration
 
 
 @pytest.mark.asyncio

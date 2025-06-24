@@ -96,7 +96,7 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         update_dict = update_data.model_dump(exclude_unset=True)
         for key, value in update_dict.items():
             setattr(entity, key, value)
-        updated_entity = await self.repo.update(entity)
+        updated_entity = await self.repo.update(object_id, entity)
         logger.info(f"{self.model_name} with ID {object_id} updated successfully")
         return updated_entity
 

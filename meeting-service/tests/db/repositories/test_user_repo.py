@@ -1,10 +1,10 @@
 import uuid
 
 import pytest
+from tests.factories import UserFactory
 
 from app.db.models.user import User
 from app.db.repositories.user_repo import UserRepository
-from tests.factories import UserFactory
 
 
 @pytest.mark.asyncio
@@ -38,12 +38,16 @@ async def test_update_user(db_session):
 
     user_factory = UserFactory.build()
     created_user = await repo.create(user_factory)
-    created_user.first_name = "Updated"
-    created_user.last_name = "Name"
+    assert created_user is not None
 
-    updated_user = await repo.update(created_user)
-    assert updated_user.first_name == "Updated"
-    assert updated_user.last_name == "Name"
+    update_payload = UserFactory.build(
+        first_name="Updated",
+        last_name="Name",
+    )
+    updated_user = await repo.update(created_user.id, update_payload)
+
+    assert updated_user.first_name == update_payload.first_name
+    assert updated_user.last_name == update_payload.last_name
 
 
 @pytest.mark.asyncio

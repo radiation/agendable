@@ -26,7 +26,7 @@ class Meeting(Base):
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     duration: Mapped[int] = mapped_column(Integer, default=30)
     location: Mapped[str] = mapped_column(String(100), default="")
-    notes: Mapped[str] = mapped_column(String)
+    notes: Mapped[str] = mapped_column(String, nullable=True)
     num_reschedules: Mapped[int] = mapped_column(Integer, default=0)
     reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)

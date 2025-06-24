@@ -1,7 +1,7 @@
 import pytest
+from tests.factories import TaskFactory
 
 from app.db.repositories.task_repo import TaskRepository
-from tests.factories import TaskFactory
 
 
 @pytest.mark.asyncio
@@ -33,9 +33,15 @@ async def test_update_task(db_session):
     created_task = await repo.create(task_factory)
     assert created_task.title == task_factory.title
 
-    created_task.title = "Updated Task"
-    updated_task = await repo.update(created_task)
-    assert updated_task.title == "Updated Task"
+    updated_payload = TaskFactory.build(
+        title="Updated Task",
+        description="Updated Description",
+        completed=True,
+    )
+    updated_task = await repo.update(created_task.id, updated_payload)
+
+    assert updated_task.title == updated_payload.title
+    assert updated_task.description == updated_payload.description
 
 
 @pytest.mark.asyncio

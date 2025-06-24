@@ -1,11 +1,11 @@
 from typing import Any, Generic, Optional, Type, TypeVar, Union, cast
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-
 from common_lib.logging_config import logger
 from common_lib.models import Base
+from sqlalchemy.exc import NoResultFound
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 ModelType = TypeVar("ModelType", bound=Base)
 
@@ -93,20 +93,27 @@ class BaseRepository(Generic[ModelType]):
             )
             raise
 
-    async def update(self, updated_obj: ModelType) -> ModelType:
-        logger.debug(f"Updating {self.model.__name__} with data: {updated_obj}")
+    async def update(self, obj_id: int, updated_obj: ModelType) -> ModelType:
+        logger.debug(f"Updating {self.model.__name__} with data: {updated_obj!r}")
         try:
-            self.db.add(updated_obj)
+            db_obj = await self.db.get(self.model, obj_id)
+            if db_obj is None:
+                raise NoResultFound(f"{self.model.__name__} with id={obj_id} not found")
+
+            for attr, value in vars(updated_obj).items():
+                # skip SQLAlchemy internals, the primary key, or any None
+                if attr.startswith("_") or attr == "id" or value is None:
+                    continue
+                setattr(db_obj, attr, value)
+
             await self.db.commit()
-            await self.db.refresh(updated_obj)
-            logger.debug(
-                f"{self.model.__name__} with ID {updated_obj.id} updated successfully"
-            )
-            return updated_obj
+            await self.db.refresh(db_obj)
+
+            logger.debug(f"{self.model.__name__} id={obj_id} updated successfully")
+            return db_obj
+
         except Exception as e:
-            logger.exception(
-                f"Error updating {self.model.__name__} with ID {updated_obj.id}: {e}"
-            )
+            logger.exception(f"Error updating {self.model.__name__} id={obj_id}: {e}")
             raise
 
     async def delete(self, object_id: Union[UUID, int]) -> bool:

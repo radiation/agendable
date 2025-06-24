@@ -1,12 +1,13 @@
+from common_lib.exceptions import NotFoundError
 import pytest
 
-from common_lib.exceptions import NotFoundError
 from app.schemas.meeting_schemas import MeetingUpdate
+from app.services.meeting_service import MeetingService
 from tests.factories import MeetingCreateFactory
 
 
 @pytest.mark.asyncio
-async def test_create_meeting_service(meeting_service):
+async def test_create_meeting_service(meeting_service: MeetingService) -> None:
     meeting_create_factory = MeetingCreateFactory.build()
     created_meeting = await meeting_service.create(meeting_create_factory)
     assert created_meeting.title == meeting_create_factory.title
@@ -14,7 +15,7 @@ async def test_create_meeting_service(meeting_service):
 
 
 @pytest.mark.asyncio
-async def test_get_meeting_service(meeting_service):
+async def test_get_meeting_service(meeting_service: MeetingService) -> None:
     meeting_create_factory = MeetingCreateFactory.build()
     created_meeting = await meeting_service.create(meeting_create_factory)
 
@@ -24,7 +25,7 @@ async def test_get_meeting_service(meeting_service):
 
 
 @pytest.mark.asyncio
-async def test_update_meeting_service(meeting_service):
+async def test_update_meeting_service(meeting_service: MeetingService) -> None:
     meeting_create_factory = MeetingCreateFactory.build()
     created_meeting = await meeting_service.create(meeting_create_factory)
 
@@ -36,7 +37,7 @@ async def test_update_meeting_service(meeting_service):
 
 
 @pytest.mark.asyncio
-async def test_delete_meeting_service(meeting_service):
+async def test_delete_meeting_service(meeting_service: MeetingService) -> None:
     meeting_create_factory = MeetingCreateFactory.build()
     created_meeting = await meeting_service.create(meeting_create_factory)
 

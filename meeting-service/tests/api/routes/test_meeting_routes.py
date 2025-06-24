@@ -1,12 +1,14 @@
 import json
+from unittest.mock import AsyncMock
 
+from httpx import AsyncClient
 import pytest
 
 from tests.factories import MeetingFactory
 
 
 @pytest.mark.asyncio
-async def test_meeting_router_lifecycle(test_client):
+async def test_meeting_router_lifecycle(test_client: AsyncClient) -> None:
     # Generate meeting data using the factory
     meeting_data = MeetingFactory.as_dict()
 
@@ -49,7 +51,7 @@ async def test_meeting_router_lifecycle(test_client):
 
 
 @pytest.mark.asyncio
-async def test_create_meeting_with_recurrence_id(test_client):
+async def test_create_meeting_with_recurrence_id(test_client: AsyncClient) -> None:
     # Create a meeting recurrence
     recurrence_data = {
         "title": "Annual Meeting",
@@ -80,7 +82,9 @@ async def test_create_meeting_with_recurrence_id(test_client):
 
 
 @pytest.mark.asyncio
-async def test_complete_meeting(test_client, mock_redis_client):
+async def test_complete_meeting(
+    test_client: AsyncClient, mock_redis_client: AsyncMock
+) -> None:
     # Generate meeting data
     meeting_data = MeetingFactory.as_dict()
 
@@ -141,7 +145,7 @@ async def test_complete_meeting(test_client, mock_redis_client):
 
 
 @pytest.mark.asyncio
-async def test_get_next_meeting(test_client):
+async def test_get_next_meeting(test_client: AsyncClient) -> None:
     # Generate meeting data
     meeting_data = MeetingFactory.as_dict()
 

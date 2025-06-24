@@ -8,8 +8,12 @@ from unittest.mock import AsyncMock
 from common_lib.models import Base
 from httpx import ASGITransport, AsyncClient
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.dependencies import (
     get_meeting_service,
@@ -53,9 +57,7 @@ async def tables(engine: AsyncEngine) -> AsyncGenerator[None, None]:
 @pytest.fixture(name="db_session", scope="function")
 async def _db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Create a new test session for each test function"""
-    async_session_factory = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    async_session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

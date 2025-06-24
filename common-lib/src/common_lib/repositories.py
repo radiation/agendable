@@ -93,7 +93,9 @@ class BaseRepository(Generic[ModelType]):
             )
             raise
 
-    async def update(self, obj_id: int, updated_obj: ModelType) -> ModelType:
+    async def update(
+        self, obj_id: Union[int, UUID], updated_obj: ModelType
+    ) -> ModelType:
         logger.debug(f"Updating {self.model.__name__} with data: {updated_obj!r}")
         try:
             db_obj = await self.db.get(self.model, obj_id)

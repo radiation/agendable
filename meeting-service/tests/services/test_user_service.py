@@ -1,12 +1,13 @@
+from common_lib.exceptions import NotFoundError
 import pytest
 
-from common_lib.exceptions import NotFoundError
 from app.schemas.user_schemas import UserUpdate
+from app.services.user_service import UserService
 from tests.factories import UserCreateFactory
 
 
 @pytest.mark.asyncio
-async def test_create_user_service(user_service):
+async def test_create_user_service(user_service: UserService) -> None:
     user_create_factory = UserCreateFactory.build()
     created_user = await user_service.create(user_create_factory)
     assert created_user.email == user_create_factory.email
@@ -15,7 +16,7 @@ async def test_create_user_service(user_service):
 
 
 @pytest.mark.asyncio
-async def test_get_user_service(user_service):
+async def test_get_user_service(user_service: UserService) -> None:
     user_create_factory = UserCreateFactory.build()
     created_user = await user_service.create(user_create_factory)
 
@@ -26,7 +27,7 @@ async def test_get_user_service(user_service):
 
 
 @pytest.mark.asyncio
-async def test_update_user_service(user_service):
+async def test_update_user_service(user_service: UserService) -> None:
     user_create_factory = UserCreateFactory.build()
     created_user = await user_service.create(user_create_factory)
 
@@ -38,7 +39,7 @@ async def test_update_user_service(user_service):
 
 
 @pytest.mark.asyncio
-async def test_delete_user_service(user_service):
+async def test_delete_user_service(user_service: UserService) -> None:
     user_create_factory = UserCreateFactory.build()
     created_user = await user_service.create(user_create_factory)
 

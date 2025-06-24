@@ -1,19 +1,20 @@
+from common_lib.exceptions import NotFoundError
 import pytest
 
-from common_lib.exceptions import NotFoundError
 from app.schemas.task_schemas import TaskUpdate
+from app.services.task_service import TaskService
 from tests.factories import TaskCreateFactory
 
 
 @pytest.mark.asyncio
-async def test_create_task_service(task_service):
+async def test_create_task_service(task_service: TaskService) -> None:
     task_create_factory = TaskCreateFactory.build()
     created_task = await task_service.create(task_create_factory)
     assert created_task.title == task_create_factory.title
 
 
 @pytest.mark.asyncio
-async def test_get_task_service(task_service):
+async def test_get_task_service(task_service: TaskService) -> None:
     task_create_factory = TaskCreateFactory.build()
     created_task = await task_service.create(task_create_factory)
 
@@ -22,7 +23,7 @@ async def test_get_task_service(task_service):
 
 
 @pytest.mark.asyncio
-async def test_update_task_service(task_service):
+async def test_update_task_service(task_service: TaskService) -> None:
     task_create_factory = TaskCreateFactory.build()
     created_task = await task_service.create(task_create_factory)
 
@@ -32,7 +33,7 @@ async def test_update_task_service(task_service):
 
 
 @pytest.mark.asyncio
-async def test_delete_task_service(task_service):
+async def test_delete_task_service(task_service: TaskService) -> None:
     task_create_factory = TaskCreateFactory.build()
     created_task = await task_service.create(task_create_factory)
 

@@ -1,10 +1,11 @@
+from httpx import AsyncClient
 import pytest
 
 from tests.factories import TaskFactory
 
 
 @pytest.mark.asyncio
-async def test_task_router_lifecycle(test_client):
+async def test_task_router_lifecycle(test_client: AsyncClient) -> None:
     task_data = TaskFactory.as_dict()
 
     # Create a task

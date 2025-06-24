@@ -1,39 +1,43 @@
 import uuid
 
 import pytest
-from tests.factories import UserFactory
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.user import User
 from app.db.repositories.user_repo import UserRepository
+from tests.factories import UserFactory
 
 
 @pytest.mark.asyncio
-async def test_create_user(db_session):
+async def test_create_user(db_session: AsyncSession) -> None:
     repo = UserRepository(db_session)
 
     user_factory = UserFactory.build()
     created_user = await repo.create(user_factory)
 
+    assert created_user is not None
     assert created_user.email == user_factory.email
     assert created_user.first_name == user_factory.first_name
     assert created_user.last_name == user_factory.last_name
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_id(db_session):
+async def test_get_user_by_id(db_session: AsyncSession) -> None:
     repo = UserRepository(db_session)
 
     user_factory = UserFactory.build()
     created_user = await repo.create(user_factory)
+    assert created_user is not None
 
     retrieved = await repo.get_by_id(created_user.id)
+    assert retrieved is not None
     assert retrieved.email == user_factory.email
     assert retrieved.first_name == user_factory.first_name
     assert retrieved.last_name == user_factory.last_name
 
 
 @pytest.mark.asyncio
-async def test_update_user(db_session):
+async def test_update_user(db_session: AsyncSession) -> None:
     repo = UserRepository(db_session)
 
     user_factory = UserFactory.build()
@@ -46,16 +50,18 @@ async def test_update_user(db_session):
     )
     updated_user = await repo.update(created_user.id, update_payload)
 
+    assert updated_user is not None
     assert updated_user.first_name == update_payload.first_name
     assert updated_user.last_name == update_payload.last_name
 
 
 @pytest.mark.asyncio
-async def test_delete_user(db_session):
+async def test_delete_user(db_session: AsyncSession) -> None:
     repo = UserRepository(db_session)
 
     user_factory = UserFactory.build()
     created_user = await repo.create(user_factory)
+    assert created_user is not None
 
     await repo.delete(created_user.id)
     deleted = await repo.get_by_id(created_user.id)
@@ -63,7 +69,7 @@ async def test_delete_user(db_session):
 
 
 @pytest.mark.asyncio
-async def test_get_all_users(db_session):
+async def test_get_all_users(db_session: AsyncSession) -> None:
     repo = UserRepository(db_session)
 
     user1 = User(

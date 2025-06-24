@@ -1,12 +1,13 @@
+from common_lib.exceptions import NotFoundError
 import pytest
 
-from common_lib.exceptions import NotFoundError
 from app.schemas.recurrence_schemas import RecurrenceUpdate
+from app.services.recurrence_service import RecurrenceService
 from tests.factories import RecurrenceCreateFactory
 
 
 @pytest.mark.asyncio
-async def test_create_recurrence_service(recurrence_service):
+async def test_create_recurrence_service(recurrence_service: RecurrenceService) -> None:
     recurrence_create_factory = RecurrenceCreateFactory.build()
     created_recurrence = await recurrence_service.create(recurrence_create_factory)
     assert created_recurrence.title == recurrence_create_factory.title
@@ -14,7 +15,7 @@ async def test_create_recurrence_service(recurrence_service):
 
 
 @pytest.mark.asyncio
-async def test_get_recurrence_service(recurrence_service):
+async def test_get_recurrence_service(recurrence_service: RecurrenceService) -> None:
     recurrence_create_factory = RecurrenceCreateFactory.build()
     created_recurrence = await recurrence_service.create(recurrence_create_factory)
 
@@ -24,23 +25,23 @@ async def test_get_recurrence_service(recurrence_service):
 
 
 @pytest.mark.asyncio
-async def test_update_recurrence_service(recurrence_service):
+async def test_update_recurrence_service(recurrence_service: RecurrenceService) -> None:
     recurrence_create_factory = RecurrenceCreateFactory.build()
     created_recurrence = await recurrence_service.create(recurrence_create_factory)
 
-    updated_recurrence = RecurrenceUpdate(
+    recurrence_payload = RecurrenceUpdate(
         title="Updated Test Recurrence", rrule="FREQ=WEEKLY;INTERVAL=2"
     )
 
     updated_recurrence = await recurrence_service.update(
-        created_recurrence.id, updated_recurrence
+        created_recurrence.id, recurrence_payload
     )
     assert updated_recurrence.title == updated_recurrence.title
     assert updated_recurrence.rrule == updated_recurrence.rrule
 
 
 @pytest.mark.asyncio
-async def test_delete_recurrence_service(recurrence_service):
+async def test_delete_recurrence_service(recurrence_service: RecurrenceService) -> None:
     recurrence_create_factory = RecurrenceCreateFactory.build()
     created_recurrence = await recurrence_service.create(recurrence_create_factory)
 

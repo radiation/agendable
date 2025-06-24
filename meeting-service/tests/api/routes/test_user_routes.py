@@ -1,10 +1,11 @@
+from httpx import AsyncClient
 import pytest
 
 from tests.factories import UserFactory
 
 
 @pytest.mark.asyncio
-async def test_user_router_lifecycle(test_client):
+async def test_user_router_lifecycle(test_client: AsyncClient) -> None:
     user_data = UserFactory.as_dict()
     updated_user_data = UserFactory.as_dict(first_name="Updated", last_name="User")
 

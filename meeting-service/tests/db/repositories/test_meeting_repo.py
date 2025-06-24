@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.meeting import Meeting
 from app.db.models.recurrence import Recurrence
@@ -7,30 +8,34 @@ from tests.factories import MeetingFactory
 
 
 @pytest.mark.asyncio
-async def test_create_meeting(db_session):
+async def test_create_meeting(db_session: AsyncSession) -> None:
     repo = MeetingRepository(db_session)
     meeting_data = MeetingFactory.build()
     created_meeting = await repo.create(meeting_data)
 
+    assert created_meeting is not None
     assert created_meeting.title == meeting_data.title
     assert created_meeting.start_date == meeting_data.start_date
 
 
 @pytest.mark.asyncio
-async def test_get_meeting_by_id(db_session):
+async def test_get_meeting_by_id(db_session: AsyncSession) -> None:
     repo = MeetingRepository(db_session)
 
     meeting_data = MeetingFactory.build()
     created_meeting = await repo.create(meeting_data)
+    assert created_meeting is not None
 
     retrieved = await repo.get_by_id(created_meeting.id)
+
+    assert retrieved is not None
     assert retrieved.title == meeting_data.title
     assert retrieved.duration == meeting_data.duration
 
 
 # TODO: Have this test actually test getting a meeting by user
 @pytest.mark.asyncio
-async def test_get_meeting_by_user(db_session):
+async def test_get_meeting_by_user(db_session: AsyncSession) -> None:
     repo = MeetingRepository(db_session)
 
     meeting_data = MeetingFactory.build()
@@ -51,7 +56,7 @@ async def test_get_meeting_by_user(db_session):
 
 
 @pytest.mark.asyncio
-async def test_update_meeting(db_session):
+async def test_update_meeting(db_session: AsyncSession) -> None:
     repo = MeetingRepository(db_session)
 
     meeting_factory = MeetingFactory.build()
@@ -66,11 +71,12 @@ async def test_update_meeting(db_session):
 
 
 @pytest.mark.asyncio
-async def test_delete_meeting(db_session):
+async def test_delete_meeting(db_session: AsyncSession) -> None:
     repo = MeetingRepository(db_session)
 
     meeting_data = MeetingFactory.build()
     created_meeting = await repo.create(meeting_data)
+    assert created_meeting is not None
 
     await repo.delete(created_meeting.id)
     deleted = await repo.get_by_id(created_meeting.id)
@@ -78,7 +84,7 @@ async def test_delete_meeting(db_session):
 
 
 @pytest.mark.asyncio
-async def test_relationships(db_session):
+async def test_relationships(db_session: AsyncSession) -> None:
     repo = MeetingRepository(db_session)
 
     recurrence = Recurrence(title="Weekly Recurrence", rrule="FREQ=WEEKLY;INTERVAL=1")
@@ -87,6 +93,7 @@ async def test_relationships(db_session):
 
     meeting_data = MeetingFactory.build(recurrence_id=recurrence.id)
     created_meeting = await repo.create(meeting_data)
+    assert created_meeting is not None
 
     repo = MeetingRepository(db_session)
     result = await repo.get_by_id(created_meeting.id)

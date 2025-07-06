@@ -27,6 +27,6 @@ class UserRetrieve(UserBase):
 
     model_config = {"from_attributes": True}
 
-    def model_dump(self, **kwargs):
+    def model_dump(self, **kwargs):  # type: ignore
         kwargs.setdefault("exclude", {"hashed_password"})
         return super().model_dump(**kwargs)

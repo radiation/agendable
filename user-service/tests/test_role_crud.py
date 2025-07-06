@@ -1,10 +1,14 @@
 import json
+from unittest.mock import AsyncMock
 
+from httpx import AsyncClient
 import pytest
 
 
 @pytest.mark.asyncio
-async def test_role_crud_operations(test_client, mock_redis_client):
+async def test_role_crud_operations(
+    test_client: AsyncClient, mock_redis_client: AsyncMock
+) -> None:
     role_data = {"name": "crudrole", "description": "Role for CRUD operations"}
 
     # Create a role

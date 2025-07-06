@@ -1,0 +1,17 @@
+[MASTER]
+ignore=alembic
+init-hook="import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))"
+
+[MESSAGES CONTROL]
+disable=
+    C0103,  # invalid-name
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+    E0013,  # bad-continuation
+    E0213,  # no-self-argument
+    R0903,  # too-few-public-methods
+    W0511   # fixme
+
+[REPORTS]
+reports=no

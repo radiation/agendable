@@ -1,12 +1,16 @@
 import json
+from unittest.mock import AsyncMock
 
+from httpx import AsyncClient
 import pytest
 
 from app.core.security import decode_access_token
 
 
 @pytest.mark.asyncio
-async def test_user_crud_operations(test_client, mock_redis_client):
+async def test_user_crud_operations(
+    test_client: AsyncClient, mock_redis_client: AsyncMock
+) -> None:
     # Create a user
     response = await test_client.post(
         "/auth/register",

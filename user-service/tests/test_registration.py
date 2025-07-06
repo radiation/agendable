@@ -1,8 +1,9 @@
+from httpx import AsyncClient
 import pytest
 
 
 @pytest.mark.asyncio
-async def test_user_registration(test_client):
+async def test_user_registration(test_client: "AsyncClient") -> None:
     # Valid registration
     response = await test_client.post(
         "/auth/register",

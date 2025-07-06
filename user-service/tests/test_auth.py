@@ -1,11 +1,15 @@
+from httpx import AsyncClient
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_password
 from app.db.repositories.user_repo import UserRepository
 
 
 @pytest.mark.asyncio
-async def test_user_registration_and_login(test_client, db_session):
+async def test_user_registration_and_login(
+    test_client: AsyncClient, db_session: AsyncSession
+) -> None:
     # Registration payload
     user_data = {"email": "test_auth@example.com", "password": "securepassword"}
 
@@ -21,10 +25,11 @@ async def test_user_registration_and_login(test_client, db_session):
 
     # Verify user exists in the database
     user_repo = UserRepository(db_session)
-    user = await user_repo.get_user_by_email(user_data["email"])
+    user = await user_repo.get_by_field("email", user_data["email"])
     assert user is not None
-    assert user.email == user_data["email"]
-    assert verify_password(user_data["password"], user.hashed_password)
+    assert len(user) > 0
+    assert user[0].email == user_data["email"]
+    assert verify_password(user_data["password"], user[0].hashed_password)
 
     # Login with the same credentials
     response = await test_client.post("/auth/login", json=user_data)

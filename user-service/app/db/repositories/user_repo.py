@@ -1,8 +1,7 @@
+from common_lib.repositories import BaseRepository
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from app.db.models import User
-from common_lib.repositories import BaseRepository
 
 
 class UserRepository(BaseRepository[User]):
@@ -15,18 +14,3 @@ class UserRepository(BaseRepository[User]):
         await self.db.commit()
         await self.db.refresh(user)
         return user
-
-    async def get_user_by_email(self, email: str) -> User:
-        stmt = select(User).where(User.email == email)
-        result = await self.db.execute(stmt)
-        return result.scalars().first()
-
-    async def get_user_by_id(self, user_id: int) -> User:
-        stmt = select(User).where(User.id == user_id)
-        result = await self.db.execute(stmt)
-        return result.scalars().first()
-
-    async def get_users(self) -> list[User]:
-        stmt = select(User)
-        result = await self.db.execute(stmt)
-        return result.scalars().all()

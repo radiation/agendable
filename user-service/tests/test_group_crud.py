@@ -1,10 +1,14 @@
 import json
+from unittest.mock import AsyncMock
 
+from httpx import AsyncClient
 import pytest
 
 
 @pytest.mark.asyncio
-async def test_group_crud_operations(test_client, mock_redis_client):
+async def test_group_crud_operations(
+    test_client: AsyncClient, mock_redis_client: AsyncMock
+) -> None:
     group_data = {
         "name": "crudgroup",
         "description": "Group for CRUD operations",

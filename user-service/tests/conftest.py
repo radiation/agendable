@@ -1,12 +1,17 @@
+from typing import AsyncGenerator
 from unittest.mock import AsyncMock
 
+from common_lib.models import Base
 from httpx import ASGITransport, AsyncClient
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.api.dependencies import get_group_service, get_role_service, get_user_service
-from app.db.models import Base
 from app.db.repositories.group_repo import GroupRepository
 from app.db.repositories.role_repo import RoleRepository
 from app.db.repositories.user_repo import UserRepository
@@ -21,7 +26,7 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture(name="engine", scope="function")
-async def _engine():
+async def _engine() -> AsyncGenerator[AsyncEngine, None]:
     # Create an in-memory SQLite engine
     _engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     yield _engine
@@ -29,7 +34,7 @@ async def _engine():
 
 
 @pytest.fixture(scope="session")
-async def tables(engine):
+async def tables(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -38,11 +43,9 @@ async def tables(engine):
 
 
 @pytest.fixture(name="db_session", scope="function")
-async def _db_session(engine):
+async def _db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Create a new test session for each test function"""
-    async_session_factory = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    async_session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -59,7 +62,9 @@ def mock_redis_client() -> AsyncMock:
 
 
 @pytest.fixture
-async def test_client(db_session, mock_redis_client):
+async def test_client(
+    db_session: AsyncSession, mock_redis_client: AsyncMock
+) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = lambda: db_session
 
     app.dependency_overrides[get_group_service] = lambda: GroupService(
@@ -81,21 +86,27 @@ async def test_client(db_session, mock_redis_client):
 
 
 @pytest.fixture
-async def user_service(db_session, mock_redis_client):
+async def user_service(
+    db_session: AsyncSession, mock_redis_client: AsyncMock
+) -> UserService:
     repo = UserRepository(db_session)
     service = UserService(repo, mock_redis_client)
     return service
 
 
 @pytest.fixture
-async def group_service(db_session, mock_redis_client):
+async def group_service(
+    db_session: AsyncSession, mock_redis_client: AsyncMock
+) -> GroupService:
     repo = GroupRepository(db_session)
     service = GroupService(repo, mock_redis_client)
     return service
 
 
 @pytest.fixture
-async def role_service(db_session, mock_redis_client):
+async def role_service(
+    db_session: AsyncSession, mock_redis_client: AsyncMock
+) -> RoleService:
     repo = RoleRepository(db_session)
     service = RoleService(repo, mock_redis_client)
     return service

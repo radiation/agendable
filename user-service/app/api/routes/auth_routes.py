@@ -1,11 +1,13 @@
+from uuid import UUID
+
+from common_lib.exceptions import ForbiddenError, NotFoundError, ValidationError
+from common_lib.logging_config import logger
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from loguru import logger
 from pydantic import BaseModel, EmailStr
 
 from app.api.dependencies import get_user_service
 from app.core.security import create_access_token, decode_access_token, verify_password
 from app.db.models import User
-from app.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.schemas.auth import Token
 from app.schemas.user import UserCreate, UserRetrieve
 from app.services.user_service import UserService
@@ -35,7 +37,7 @@ async def register_user(
         logger.info(f"User created successfully with ID: {new_user.id}")
         token = create_access_token(data={"sub": new_user.email, "id": new_user.id})
         logger.debug(f"Token: {token}")
-        return {"access_token": token, "token_type": "bearer"}
+        return Token(access_token=token, token_type="bearer")
     except Exception as exc:
         logger.exception("Unexpected error while creating user")
         raise ValidationError(
@@ -56,11 +58,12 @@ async def login_user(
     if not verify_password(login_request.password, user[0].hashed_password):
         raise ForbiddenError(f"Invalid password for user {login_request.email}")
     token = create_access_token(data={"sub": user[0].email})
-    return {"access_token": token, "token_type": "bearer"}
+    return Token(access_token=token, token_type="bearer")
 
 
 @router.get("/protected-route", response_model=UserRetrieve)
-async def protected_route(authorization: str = Header(...)):
+async def protected_route(authorization: str = Header(...)) -> UserRetrieve:
+    STUB_UUID = UUID("00000000-0000-0000-0000-000000000001")
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format"
@@ -74,4 +77,4 @@ async def protected_route(authorization: str = Header(...)):
             status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
         ) from exc
 
-    return {"id": 1, "email": payload["sub"]}
+    return UserRetrieve(id=STUB_UUID, email=payload["sub"])

@@ -1,6 +1,5 @@
 from httpx import AsyncClient
 import pytest
-
 from tests.factories import TaskFactory
 
 

@@ -1,9 +1,9 @@
 from common_lib.exceptions import NotFoundError
 import pytest
+from tests.factories import RecurrenceCreateFactory
 
 from app.schemas.recurrence_schemas import RecurrenceUpdate
 from app.services.recurrence_service import RecurrenceService
-from tests.factories import RecurrenceCreateFactory
 
 
 @pytest.mark.asyncio

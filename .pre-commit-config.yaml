@@ -11,57 +11,60 @@ repos:
     hooks:
     -   id: ruff
         args: [--fix]
+        exclude: ^.*/alembic/.*$
     -   id: ruff-format
+        exclude: ^.*/alembic/.*$
 
 -   repo: https://github.com/pre-commit/mirrors-isort
     rev: v5.10.1
     hooks:
     -   id: isort
+        exclude: ^.*/alembic/.*$
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.5.1
     hooks:
     -   id: mypy
         name: mypy-common-lib
-        entry: mypy --config-file common-lib/mypy.ini
+        entry: mypy --config-file common-lib/mypy.ini common-lib
         language: system
         types: [python]
-        files: ^common-lib/
+        pass_filenames: false
 
     -   id: mypy
         name: mypy-meeting-service
-        entry: mypy --config-file meeting-service/mypy.ini
+        entry: mypy --config-file meeting-service/mypy.ini meeting-service
         language: system
         types: [python]
-        files: ^meeting-service/
+        pass_filenames: false
 
     -   id: mypy
         name: mypy-user-service
-        entry: mypy --config-file user-service/mypy.ini
+        entry: mypy --config-file user-service/mypy.ini user-service
         language: system
         types: [python]
-        files: ^user-service/
+        pass_filenames: false
 
 -   repo: https://github.com/PyCQA/pylint
     rev: v3.0.3
     hooks:
     -   id: pylint
         name: pylint-common-lib
-        entry: pylint --rcfile common-lib/.pylintrc
+        entry: pylint --rcfile common-lib/.pylintrc common-lib
         language: system
         types: [python]
-        files: ^common-lib/
+        pass_filenames: false
 
     -   id: pylint
         name: pylint-meeting-service
-        entry: pylint --rcfile meeting-service/.pylintrc
+        entry: pylint --rcfile meeting-service/.pylintrc meeting-service
         language: system
         types: [python]
-        files: ^meeting-service/
+        pass_filenames: false
 
     -   id: pylint
         name: pylint-user-service
-        entry: pylint --rcfile user-service/.pylintrc
+        entry: pylint --rcfile user-service/.pylintrc user-service
         language: system
         types: [python]
-        files: ^user-service/
+        pass_filenames: false

@@ -1,9 +1,9 @@
 from common_lib.exceptions import NotFoundError
 import pytest
+from tests.factories import UserCreateFactory
 
 from app.schemas.user_schemas import UserUpdate
 from app.services.user_service import UserService
-from tests.factories import UserCreateFactory
 
 
 @pytest.mark.asyncio

@@ -1,9 +1,9 @@
 from common_lib.exceptions import NotFoundError
 import pytest
+from tests.factories import MeetingCreateFactory
 
 from app.schemas.meeting_schemas import MeetingUpdate
 from app.services.meeting_service import MeetingService
-from tests.factories import MeetingCreateFactory
 
 
 @pytest.mark.asyncio

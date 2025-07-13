@@ -1,16 +1,50 @@
 [build-system]
-requires = [
-  "uv>=0.4.0",
-  "hatchling>=1.16.0"
-]
+requires = ["hatchling>=1.16.0"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+# allow direct references like "{root:uri}/path"
+allow-direct-references = true
+
 [tool.uv]
-# workspace config
 workspace = { members = ["common-lib", "meeting-service", "user-service"] }
 
-# dev tools (installed via `uv sync --with dev`)
-dev-dependencies = [
+[tool.uv.sources]
+common-lib      = { workspace = true }
+meeting-service = { workspace = true }
+user-service    = { workspace = true }
+
+[project]
+name            = "Agendable"
+version         = "0.1.0"
+description     = "Agendable is an app for managing recurring meetings"
+readme          = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+  # your local workspace packages via hatchling’s {root:uri}
+  "common-lib      @ {root:uri}/common-lib/src",        # :contentReference[oaicite:0]{index=0}
+  "meeting-service @ {root:uri}/meeting-service",       # :contentReference[oaicite:1]{index=1}
+  "user-service    @ {root:uri}/user-service",          # :contentReference[oaicite:2]{index=2}
+
+  # runtime deps
+  "fastapi>=0.115.11",
+  "uvicorn>=0.34.3",
+  "pydantic>=2.10.6",
+  "pydantic-settings>=2.8.1",
+  "sqlalchemy>=2.0.39",
+  "redis>=5.2.1",
+  "httpx>=0.28.1",
+  "loguru>=0.7.3",
+  "greenlet>=3.1.1",
+  "python-dateutil>=2.9.0.post0",
+  "asyncpg>=0.30.0",
+  "aiosqlite>=0.21.0",
+  "psycopg2-binary>=2.9.10",
+]
+
+[dependency-groups]
+dev = [
   "async-asgi-testclient>=1.4.11",
   "coverage>=7.7.0",
   "factory-boy>=3.3.3",
@@ -26,33 +60,6 @@ dev-dependencies = [
   "types-passlib>=1.7.7.20250602",
   "types-python-dateutil>=2.9.0.20250516",
   "types-python-jose>=3.5.0.20250531",
-]
-
-[tool.uv.sources]
-"common-lib"      = { workspace = true }
-"meeting-service" = { workspace = true }
-"user-service"    = { workspace = true }
-
-[project]
-name = "Agendable"
-version = "0.1.0"
-description = "Agendable is an app for managing recurring meetings"
-readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-  "fastapi>=0.115.11",
-  "uvicorn>=0.34.3",
-  "pydantic>=2.10.6",
-  "pydantic-settings>=2.8.1",
-  "sqlalchemy>=2.0.39",
-  "redis>=5.2.1",
-  "httpx>=0.28.1",
-  "loguru>=0.7.3",
-  "greenlet>=3.1.1",
-  "python-dateutil>=2.9.0.post0",
-  "asyncpg>=0.30.0",
-  "aiosqlite>=0.21.0",
-  "psycopg2-binary>=2.9.10",
 ]
 
 [tool.pytest.ini_options]
@@ -71,7 +78,4 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = []
-include = [
-  "pyproject.toml",
-  "README.md",
-]
+include  = ["pyproject.toml", "README.md"]

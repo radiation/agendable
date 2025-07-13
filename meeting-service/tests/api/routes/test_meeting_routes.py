@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 import pytest
-
 from tests.factories import MeetingFactory
 
 

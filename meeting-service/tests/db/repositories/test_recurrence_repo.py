@@ -1,8 +1,8 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from tests.factories import RecurrenceFactory
 
 from app.db.repositories.recurrence_repo import RecurrenceRepository
-from tests.factories import RecurrenceFactory
 
 
 @pytest.mark.asyncio

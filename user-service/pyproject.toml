@@ -1,17 +1,9 @@
-[build-system]
-requires = [
-  "uv>=0.4.0",
-  "hatchling>=1.16.0"
-]
-build-backend = "hatchling.build"
-
 [project]
-name = "agendable-user-service"
+name = "user-service"
 version = "0.1.0"
 description = "Agendable User Service"
 readme = "../README.md"
 requires-python = ">=3.13"
-
 dependencies = [
   "common-lib",
   "passlib[bcrypt]>=1.7.4",
@@ -19,20 +11,6 @@ dependencies = [
   "python-jose>=3.5.0",
 ]
 
-[tool.hatch.build]
+[tool.hatch.build.targets.wheel]
 packages = []
 include = ["app"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-
-[tool.isort]
-profile = "black"
-force_sort_within_sections = true
-known_first_party = ["app"]
-
-[tool.ruff]
-exclude = [
-  "**/__init__.py",
-  "**/alembic/versions/**",
-]

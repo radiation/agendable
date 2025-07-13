@@ -1,8 +1,8 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from tests.factories import TaskFactory
 
 from app.db.repositories.task_repo import TaskRepository
-from tests.factories import TaskFactory
 
 
 @pytest.mark.asyncio

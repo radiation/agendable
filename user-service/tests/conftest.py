@@ -1,3 +1,5 @@
+# pylint: disable=redefined-outer-name
+
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock
 

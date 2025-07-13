@@ -5,7 +5,7 @@ from common_lib.logging_config import logger
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
-from app.api.dependencies import get_user_service
+from app.api.dependencies import get_auth_service, get_user_service
 from app.core.security import create_access_token, decode_access_token, verify_password
 from app.db.models import User
 from app.schemas.auth import Token
@@ -48,7 +48,7 @@ async def register_user(
 @router.post("/login", response_model=Token)
 async def login_user(
     login_request: LoginRequest,
-    service: UserService = Depends(get_user_service),
+    service: UserService = Depends(get_auth_service),
 ) -> Token:
     user: list[User] = await service.get_by_field(
         field_name="email", value=login_request.email

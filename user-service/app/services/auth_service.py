@@ -1,9 +1,6 @@
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import Depends
-
-from app.api.dependencies import get_user_repository
 from app.core.security import create_access_token, verify_password
 from app.db.models import User
 from app.db.repositories.user_repo import UserRepository
@@ -12,7 +9,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 class AuthService:
-    def __init__(self, repo: UserRepository = Depends(get_user_repository)):
+    def __init__(self, repo: UserRepository):
         self.repo = repo
 
     async def authenticate_user(self, email: str, password: str) -> Optional[User]:

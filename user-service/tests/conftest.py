@@ -13,15 +13,15 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.api.dependencies import get_group_service, get_role_service, get_user_service
-from app.db.repositories.group_repo import GroupRepository
-from app.db.repositories.role_repo import RoleRepository
-from app.db.repositories.user_repo import UserRepository
+from app.core.dependencies import get_group_service, get_role_service, get_user_service
 from app.db.session import get_db
 from app.main import app
-from app.services.group_service import GroupService
-from app.services.role_service import RoleService
-from app.services.user_service import UserService
+from app.repositories.group import GroupRepository
+from app.repositories.role import RoleRepository
+from app.repositories.user import UserRepository
+from app.services.group import GroupService
+from app.services.role import RoleService
+from app.services.user import UserService
 
 # Use an in-memory SQLite database for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

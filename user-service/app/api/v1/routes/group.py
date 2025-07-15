@@ -1,9 +1,9 @@
 from common_lib.exceptions import handle_service_exceptions
 from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies import get_group_service
-from app.schemas.groups import GroupCreate, GroupRetrieve, GroupUpdate
-from app.services.group_service import GroupService
+from app.core.dependencies import get_group_service
+from app.schemas.group import GroupCreate, GroupRetrieve, GroupUpdate
+from app.services.group import GroupService
 
 router = APIRouter()
 

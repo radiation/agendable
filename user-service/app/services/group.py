@@ -3,9 +3,9 @@ from typing import Optional
 from common_lib.services import BaseService
 from redis.asyncio import Redis
 
-from app.db.models import Group
-from app.db.repositories.group_repo import GroupRepository
-from app.schemas.groups import GroupCreate, GroupUpdate
+from app.db.models.group import Group
+from app.repositories.group import GroupRepository
+from app.schemas.group import GroupCreate, GroupUpdate
 
 
 class GroupService(BaseService[Group, GroupCreate, GroupUpdate]):

@@ -3,9 +3,9 @@ from uuid import UUID
 from common_lib.exceptions import handle_service_exceptions
 from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies import get_current_user, get_user_service
+from app.core.dependencies import get_current_user, get_user_service
 from app.schemas.user import UserCreate, UserRetrieve, UserUpdate
-from app.services.user_service import UserService
+from app.services.user import UserService
 
 router = APIRouter()
 

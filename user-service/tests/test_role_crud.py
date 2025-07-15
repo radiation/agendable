@@ -24,9 +24,9 @@ async def test_role_crud_operations(
                 "event_type": "create",
                 "model": "Role",
                 "payload": {
+                    "id": role_data["id"],
                     "name": "crudrole",
                     "description": "Role for CRUD operations",
-                    "id": str(role_data["id"]),
                 },
             }
         ),
@@ -54,7 +54,7 @@ async def test_role_crud_operations(
             {
                 "event_type": "update",
                 "model": "Role",
-                "payload": {"id": int(role_id), "name": "updatedrole"},
+                "payload": {"name": "updatedrole", "id": int(role_id)},
             }
         ),
     )

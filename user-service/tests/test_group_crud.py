@@ -30,9 +30,9 @@ async def test_group_crud_operations(
                 "event_type": "create",
                 "model": "Group",
                 "payload": {
+                    "id": group_data["id"],
                     "name": "crudgroup",
                     "description": "Group for CRUD operations",
-                    "id": str(group_data["id"]),
                 },
             }
         ),
@@ -59,7 +59,7 @@ async def test_group_crud_operations(
             {
                 "event_type": "update",
                 "model": "Group",
-                "payload": {"id": int(group_data["id"]), "name": "updatedgroup"},
+                "payload": {"name": "updatedgroup", "id": int(group_data["id"])},
             }
         ),
     )

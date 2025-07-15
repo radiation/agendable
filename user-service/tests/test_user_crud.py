@@ -33,12 +33,12 @@ async def test_user_crud_operations(
                 "event_type": "create",
                 "model": "User",
                 "payload": {
+                    "id": decoded_token["id"],
                     "email": "cruduser@example.com",
                     "first_name": "Crud",
                     "last_name": "User",
                     "is_active": True,
                     "is_superuser": False,
-                    "id": decoded_token["id"],
                 },
             }
         ),
@@ -75,7 +75,6 @@ async def test_user_crud_operations(
                 "event_type": "update",
                 "model": "User",
                 "payload": {
-                    "id": user_data["id"],
                     "email": "updateduser@example.com",
                 },
             }

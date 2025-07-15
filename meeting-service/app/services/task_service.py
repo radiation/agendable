@@ -15,7 +15,7 @@ class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):
     def __init__(
         self, repo: TaskRepository, redis_client: Optional[Redis] = None
     ) -> None:
-        super().__init__(repo)
+        super().__init__(repo, redis_client=redis_client)
         self.repo: TaskRepository = repo
 
     async def mark_task_complete(self, task_id: int) -> TaskRetrieve:

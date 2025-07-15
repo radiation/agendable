@@ -28,6 +28,8 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         return self.repo.model.__name__
 
     async def _publish_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        for sensitive in ("password", "hashed_password"):
+            payload.pop(sensitive, None)
         event = {
             "event_type": event_type,
             "model": self._get_model_name(),
@@ -49,7 +51,6 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             logger.error(f"Failed to create {self.model_name}")
             raise RuntimeError(f"Failed to create {self.model_name}")
         logger.info(f"{self.model_name} created successfully with ID: {result.id}")
-        logger.info(type(result))
         await self._publish_event(
             event_type="create",
             payload=result.as_dict(),
@@ -102,6 +103,10 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             setattr(entity, key, value)
         updated_entity = await self.repo.update(object_id, entity)
         logger.info(f"{self.model_name} with ID {object_id} updated successfully")
+        await self._publish_event(
+            event_type="update",
+            payload=update_dict,
+        )
         return updated_entity
 
     async def delete(self, object_id: Union[UUID, int]) -> bool:
@@ -119,4 +124,8 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             logger.info(f"{self.model_name} with ID {object_id} deleted successfully")
         else:
             logger.error(f"Failed to delete {self.model_name} with ID {object_id}")
+        await self._publish_event(
+            event_type="delete",
+            payload={"id": object_id},
+        )
         return success

@@ -49,6 +49,11 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             logger.error(f"Failed to create {self.model_name}")
             raise RuntimeError(f"Failed to create {self.model_name}")
         logger.info(f"{self.model_name} created successfully with ID: {result.id}")
+        logger.info(type(result))
+        await self._publish_event(
+            event_type="create",
+            payload=result.as_dict(),
+        )
         return result
 
     async def get_by_id(self, object_id: Union[UUID, int]) -> ModelType:

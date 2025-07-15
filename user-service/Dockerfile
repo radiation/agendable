@@ -1,35 +1,41 @@
-# Use the official slim Python image for the desired version
-FROM python:3.13.1-slim
-
-# Set the working directory
+#################
+# BUILDER STAGE #
+#################
+FROM python:3.13-slim AS builder
 WORKDIR /app
 
-# Install system dependencies, including g++
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc g++ build-essential redis-tools && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install UV
+RUN pip install --upgrade pip \
+ && pip install uv
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy root-level project metadata and lockfile
+COPY pyproject.toml uv.lock ./
 
-# Copy application code
-COPY ./app /app
+# Copy all workspace folders so UV can resolve path-deps
+COPY common-lib/ common-lib/
+COPY user-service/ user-service/
 
-# Copy Alembic migration scripts
-COPY ./alembic /migrations/alembic
-COPY ./alembic.ini /migrations/alembic.ini
+# Create the service venv & install only its runtime deps
+WORKDIR /app/user-service
+RUN uv sync --project user-service --no-dev
 
-# Copy and prepare the entrypoint script
-COPY ./entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+###############
+# FINAL IMAGE #
+###############
+FROM python:3.13-slim
+WORKDIR /app/user-service
 
-# Set environment variables
-ENV PYTHONPATH=/app
+# Copy prebuilt venv from the builder
+COPY --from=builder /app/user-service/.venv .venv
 
-# Expose the application port
-EXPOSE 8001
+# Copy only service code
+COPY --from=builder /app/user-service/app ./app
 
-# Define the default entrypoint and command
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+# Activate venv
+ENV VIRTUAL_ENV=/app/user-service/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+EXPOSE 8000
+
+# Run FastAPI app
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

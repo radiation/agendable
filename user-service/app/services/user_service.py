@@ -5,9 +5,12 @@ from redis.asyncio import Redis
 
 from app.db.models import User
 from app.db.repositories.user_repo import UserRepository
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import UserCreate, UserRegistration, UserUpdate
 
 
 class UserService(BaseService[User, UserCreate, UserUpdate]):
     def __init__(self, repository: UserRepository, redis_client: Optional[Redis]):
         super().__init__(repository, redis_client)
+
+    async def register_user(self, payload: UserRegistration) -> User:
+        return await super().create(create_data=payload.to_create())

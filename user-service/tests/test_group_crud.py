@@ -23,7 +23,7 @@ async def test_group_crud_operations(
     group_data = response.json()
     assert group_data["name"] == "crudgroup"
 
-    mock_redis_client.publish.assert_awaited_once_with(
+    mock_redis_client.publish.assert_awaited_with(
         "group-events",
         json.dumps(
             {

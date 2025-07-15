@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from common_lib.exceptions import ForbiddenError, NotFoundError, ValidationError
@@ -9,7 +10,8 @@ from app.api.dependencies import get_auth_service, get_user_service
 from app.core.security import create_access_token, decode_access_token, verify_password
 from app.db.models import User
 from app.schemas.auth import Token
-from app.schemas.user import UserCreate, UserRetrieve
+from app.schemas.user import UserRegistration, UserRetrieve
+from app.services.auth_service import AuthService
 from app.services.user_service import UserService
 
 router = APIRouter()
@@ -22,18 +24,18 @@ class LoginRequest(BaseModel):
 
 @router.post("/register", response_model=Token)
 async def register_user(
-    user_create: UserCreate,
+    registration_data: UserRegistration,
     service: UserService = Depends(get_user_service),
 ) -> Token:
-    logger.info(f"Registering user with data: {user_create.model_dump()}")
+    logger.info(f"Registering user with data: {registration_data.model_dump()}")
     existing_user: list[User] = await service.get_by_field(
-        field_name="email", value=user_create.email
+        field_name="email", value=registration_data.email
     )
     if existing_user:
-        logger.warning(f"User with email {user_create.email} already exists")
+        logger.warning(f"User with email {registration_data.email} already exists")
         raise ValidationError("User with this email already exists")
     try:
-        new_user: User = await service.create(user_create)
+        new_user: User = await service.register_user(registration_data)
         logger.info(f"User created successfully with ID: {new_user.id}")
         token = create_access_token(data={"sub": new_user.email, "id": new_user.id})
         logger.debug(f"Token: {token}")
@@ -48,16 +50,16 @@ async def register_user(
 @router.post("/login", response_model=Token)
 async def login_user(
     login_request: LoginRequest,
-    service: UserService = Depends(get_auth_service),
+    service: AuthService = Depends(get_auth_service),
 ) -> Token:
-    user: list[User] = await service.get_by_field(
-        field_name="email", value=login_request.email
+    user: Optional[User] = await service.authenticate_user(
+        email=login_request.email, password=login_request.password
     )
     if not user:
         raise NotFoundError(f"User with email {login_request.email} not found")
-    if not verify_password(login_request.password, user[0].hashed_password):
+    if not verify_password(login_request.password, user.hashed_password):
         raise ForbiddenError(f"Invalid password for user {login_request.email}")
-    token = create_access_token(data={"sub": user[0].email})
+    token = create_access_token(data={"sub": user.email})
     return Token(access_token=token, token_type="bearer")
 
 

@@ -1,41 +1,41 @@
-# Allow python version to be passed as an arg
-ARG PYTHON_VERSION=3.13.1
-FROM python:${PYTHON_VERSION}-slim
-
-# Set the working directory
+#################
+# BUILDER STAGE #
+#################
+FROM python:3.13-slim AS builder
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc g++ build-essential && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install UV
+RUN pip install --upgrade pip \
+ && pip install uv
 
-# Install uv first
-RUN pip install uv
-
-# Copy the project files before installing dependencies (to leverage Docker caching)
+# Copy root-level project metadata and lockfile
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-RUN uv pip install -r pyproject.toml --system
+# Copy all workspace folders so UV can resolve path-deps
+COPY common-lib/ common-lib/
+COPY meeting-service/ meeting-service/
 
-# Copy application code
-COPY ./app /app
+# Create the service venv & install only its runtime deps
+WORKDIR /app/meeting-service
+RUN uv sync --project meeting-service --no-dev
 
-# Copy Alembic migration scripts
-COPY ./alembic /migrations/alembic
-COPY ./alembic.ini /migrations/alembic.ini
+###############
+# FINAL IMAGE #
+###############
+FROM python:3.13-slim
+WORKDIR /app/meeting-service
 
-# Copy and prepare the entrypoint script
-COPY ./entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Copy prebuilt venv from the builder
+COPY --from=builder /app/meeting-service/.venv .venv
 
-# Set environment variables
-ENV PYTHONPATH=/app
+# Copy only service code
+COPY --from=builder /app/meeting-service/app ./app
 
-# Expose the application port
-EXPOSE 8001
+# Activate venv
+ENV VIRTUAL_ENV=/app/meeting-service/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Define the default entrypoint and command
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+EXPOSE 8000
+
+# Run FastAPI app
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

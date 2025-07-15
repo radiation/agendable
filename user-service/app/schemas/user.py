@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
+from app.core.security import get_password_hash
+
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -13,7 +15,17 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    hashed_password: str
+
+
+class UserRegistration(UserBase):
     password: str
+
+    def to_create(self) -> UserCreate:
+        data = self.model_dump(exclude_none=True)
+        raw = data.pop("password")
+        data["hashed_password"] = get_password_hash(raw)
+        return UserCreate(**data)
 
 
 class UserUpdate(BaseModel):

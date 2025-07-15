@@ -6,13 +6,13 @@ from common_lib.logging_config import logger
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
-from app.api.dependencies import get_auth_service, get_user_service
+from app.core.dependencies import get_auth_service, get_user_service
 from app.core.security import create_access_token, decode_access_token, verify_password
-from app.db.models import User
+from app.db.models.user import User
 from app.schemas.auth import Token
 from app.schemas.user import UserRegistration, UserRetrieve
-from app.services.auth_service import AuthService
-from app.services.user_service import UserService
+from app.services.auth import AuthService
+from app.services.user import UserService
 
 router = APIRouter()
 

@@ -1,9 +1,9 @@
 from common_lib.repositories import BaseRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Group
+from app.db.models.role import Role
 
 
-class GroupRepository(BaseRepository[Group]):
+class RoleRepository(BaseRepository[Role]):
     def __init__(self, db: AsyncSession):
-        super().__init__(model=Group, db=db)
+        super().__init__(model=Role, db=db)

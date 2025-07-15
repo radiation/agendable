@@ -3,8 +3,8 @@ from typing import Optional
 from common_lib.services import BaseService
 from redis.asyncio import Redis
 
-from app.db.models import User
-from app.db.repositories.user_repo import UserRepository
+from app.db.models.user import User
+from app.repositories.user import UserRepository
 from app.schemas.user import UserCreate, UserRegistration, UserUpdate
 
 

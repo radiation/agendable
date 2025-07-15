@@ -3,7 +3,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_password
-from app.db.repositories.user_repo import UserRepository
+from app.repositories.user import UserRepository
 
 
 @pytest.mark.asyncio

@@ -2,8 +2,8 @@ from datetime import timedelta
 from typing import Optional
 
 from app.core.security import create_access_token, verify_password
-from app.db.models import User
-from app.db.repositories.user_repo import UserRepository
+from app.db.models.user import User
+from app.repositories.user import UserRepository
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

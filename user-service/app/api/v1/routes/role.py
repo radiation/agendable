@@ -1,9 +1,9 @@
 from common_lib.exceptions import handle_service_exceptions
 from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies import get_role_service
-from app.schemas.roles import RoleCreate, RoleRetrieve, RoleUpdate
-from app.services.role_service import RoleService
+from app.core.dependencies import get_role_service
+from app.schemas.role import RoleCreate, RoleRetrieve, RoleUpdate
+from app.services.role import RoleService
 
 router = APIRouter()
 

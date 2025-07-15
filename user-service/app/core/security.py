@@ -7,7 +7,7 @@ from jose import jwt
 from jose.exceptions import ExpiredSignatureError, JWTError
 from passlib.context import CryptContext
 
-from app.core.settings import settings
+from app.core.config import settings
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30

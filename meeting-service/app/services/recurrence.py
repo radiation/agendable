@@ -8,8 +8,8 @@ from dateutil.rrule import rrulestr
 from redis.asyncio import Redis
 
 from app.db.models.recurrence import Recurrence
-from app.db.repositories.recurrence_repo import RecurrenceRepository
-from app.schemas.recurrence_schemas import RecurrenceCreate, RecurrenceUpdate
+from app.repositories.recurrence import RecurrenceRepository
+from app.schemas.recurrence import RecurrenceCreate, RecurrenceUpdate
 
 
 class RecurrenceService(BaseService[Recurrence, RecurrenceCreate, RecurrenceUpdate]):

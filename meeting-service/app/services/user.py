@@ -4,8 +4,8 @@ from common_lib.services import BaseService
 from redis.asyncio import Redis
 
 from app.db.models.user import User
-from app.db.repositories.user_repo import UserRepository
-from app.schemas.user_schemas import UserCreate, UserUpdate
+from app.repositories.user import UserRepository
+from app.schemas.user import UserCreate, UserUpdate
 
 
 class UserService(BaseService[User, UserCreate, UserUpdate]):

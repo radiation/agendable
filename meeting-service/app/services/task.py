@@ -7,8 +7,8 @@ from common_lib.services import BaseService
 from redis.asyncio import Redis
 
 from app.db.models.task import Task
-from app.db.repositories.task_repo import TaskRepository
-from app.schemas.task_schemas import TaskCreate, TaskRetrieve, TaskUpdate
+from app.repositories.task import TaskRepository
+from app.schemas.task import TaskCreate, TaskRetrieve, TaskUpdate
 
 
 class TaskService(BaseService[Task, TaskCreate, TaskUpdate]):

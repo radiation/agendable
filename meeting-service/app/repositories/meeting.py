@@ -13,7 +13,7 @@ from app.db.models.meeting import Meeting
 from app.db.models.recurrence import Recurrence
 from app.db.models.relationships import meeting_users
 from app.db.models.user import User
-from app.schemas.meeting_schemas import MeetingCreate
+from app.schemas.meeting import MeetingCreate
 
 
 class MeetingRepository(BaseRepository[Meeting]):

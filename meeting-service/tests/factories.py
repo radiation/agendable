@@ -9,10 +9,10 @@ from app.db.models.meeting import Meeting
 from app.db.models.recurrence import Recurrence
 from app.db.models.task import Task
 from app.db.models.user import User
-from app.schemas.meeting_schemas import MeetingCreate
-from app.schemas.recurrence_schemas import RecurrenceCreate
-from app.schemas.task_schemas import TaskCreate
-from app.schemas.user_schemas import UserCreate
+from app.schemas.meeting import MeetingCreate
+from app.schemas.recurrence import RecurrenceCreate
+from app.schemas.task import TaskCreate
+from app.schemas.user import UserCreate
 
 
 class BaseFactory(factory.alchemy.SQLAlchemyModelFactory):

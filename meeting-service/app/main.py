@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from redis.asyncio import Redis
 
-from app.api.routes import meeting_routes, recurrence_routes, task_routes, user_routes
+from app.api.v1.routes import meeting, recurrence, task, user
 from app.core.dependencies import (
     get_db,
     get_redis_client,
@@ -88,14 +88,10 @@ app.add_exception_handler(ValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
 # Include routers that might use the database internally
-app.include_router(meeting_routes.router, prefix="/meetings", tags=["meetings"])
-app.include_router(task_routes.router, prefix="/tasks", tags=["tasks"])
-app.include_router(user_routes.router, prefix="/meeting_users", tags=["users"])
-app.include_router(
-    recurrence_routes.router,
-    prefix="/recurrences",
-    tags=["recurrences"],
-)
+app.include_router(meeting.router, prefix="/meetings", tags=["meetings"])
+app.include_router(task.router, prefix="/tasks", tags=["tasks"])
+app.include_router(user.router, prefix="/meeting_users", tags=["users"])
+app.include_router(recurrence.router, prefix="/recurrences", tags=["recurrences"])
 
 
 @app.get("/")

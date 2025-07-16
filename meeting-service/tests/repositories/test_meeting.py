@@ -4,7 +4,7 @@ from tests.factories import MeetingFactory
 
 from app.db.models.meeting import Meeting
 from app.db.models.recurrence import Recurrence
-from app.db.repositories.meeting_repo import MeetingRepository
+from app.repositories.meeting import MeetingRepository
 
 
 @pytest.mark.asyncio

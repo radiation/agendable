@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tests.factories import UserFactory
 
 from app.db.models.user import User
-from app.db.repositories.user_repo import UserRepository
+from app.repositories.user import UserRepository
 
 
 @pytest.mark.asyncio

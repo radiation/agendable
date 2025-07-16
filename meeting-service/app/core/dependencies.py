@@ -5,15 +5,15 @@ from fastapi import Depends
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.db import get_db
-from app.db.repositories.meeting_repo import MeetingRepository
-from app.db.repositories.recurrence_repo import RecurrenceRepository
-from app.db.repositories.task_repo import TaskRepository
-from app.db.repositories.user_repo import UserRepository
-from app.services.meeting_service import MeetingService
-from app.services.recurrence_service import RecurrenceService
-from app.services.task_service import TaskService
-from app.services.user_service import UserService
+from app.db.session import get_db
+from app.repositories.meeting import MeetingRepository
+from app.repositories.recurrence import RecurrenceRepository
+from app.repositories.task import TaskRepository
+from app.repositories.user import UserRepository
+from app.services.meeting import MeetingService
+from app.services.recurrence import RecurrenceService
+from app.services.task import TaskService
+from app.services.user import UserService
 
 __all__ = ["get_db", "get_redis_client", "get_task_service", "get_user_service"]
 

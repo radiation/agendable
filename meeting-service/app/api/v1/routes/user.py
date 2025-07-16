@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends
 
 from app.core.decorators import log_execution_time
 from app.core.dependencies import get_user_service
-from app.schemas.user_schemas import UserCreate, UserRetrieve, UserUpdate
-from app.services.user_service import UserService
+from app.schemas.user import UserCreate, UserRetrieve, UserUpdate
+from app.services.user import UserService
 
 router = APIRouter()
 

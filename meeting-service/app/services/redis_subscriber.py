@@ -8,9 +8,9 @@ from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 
-from app.schemas.user_schemas import UserCreate, UserUpdate
-from app.services.task_service import TaskService
-from app.services.user_service import UserService
+from app.schemas.user import UserCreate, UserUpdate
+from app.services.task import TaskService
+from app.services.user import UserService
 
 T = TypeVar("T", bound=BaseModel)
 

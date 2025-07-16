@@ -6,14 +6,14 @@ from fastapi import APIRouter, Depends
 
 from app.core.decorators import log_execution_time
 from app.core.dependencies import get_meeting_service
-from app.schemas.meeting_schemas import (
+from app.schemas.meeting import (
     MeetingCreate,
     MeetingCreateBatch,
     MeetingRetrieve,
     MeetingUpdate,
 )
-from app.schemas.user_schemas import AddUsersRequest, UserRetrieve
-from app.services.meeting_service import MeetingService
+from app.schemas.user import AddUsersRequest, UserRetrieve
+from app.services.meeting import MeetingService
 
 router = APIRouter()
 

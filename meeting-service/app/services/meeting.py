@@ -9,9 +9,9 @@ from redis.asyncio import Redis
 from sqlalchemy import Column
 
 from app.db.models.meeting import Meeting
-from app.db.repositories.meeting_repo import MeetingRepository
-from app.schemas.meeting_schemas import MeetingCreate, MeetingRetrieve, MeetingUpdate
-from app.schemas.user_schemas import UserRetrieve
+from app.repositories.meeting import MeetingRepository
+from app.schemas.meeting import MeetingCreate, MeetingRetrieve, MeetingUpdate
+from app.schemas.user import UserRetrieve
 
 
 class MeetingService(BaseService[Meeting, MeetingCreate, MeetingUpdate]):

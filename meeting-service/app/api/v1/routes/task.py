@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends
 
 from app.core.decorators import log_execution_time
 from app.core.dependencies import get_task_service
-from app.schemas.task_schemas import TaskCreate, TaskRetrieve, TaskUpdate
-from app.services.task_service import TaskService
+from app.schemas.task import TaskCreate, TaskRetrieve, TaskUpdate
+from app.services.task import TaskService
 
 router = APIRouter()
 

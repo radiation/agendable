@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.recurrence_schemas import RecurrenceRetrieve
+from app.schemas.recurrence import RecurrenceRetrieve
 
 
 class MeetingBase(BaseModel):

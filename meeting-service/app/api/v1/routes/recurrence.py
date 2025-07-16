@@ -6,13 +6,13 @@ from fastapi import APIRouter, Depends
 
 from app.core.decorators import log_execution_time
 from app.core.dependencies import get_recurrence_service
-from app.schemas.meeting_schemas import MeetingRetrieve
-from app.schemas.recurrence_schemas import (
+from app.schemas.meeting import MeetingRetrieve
+from app.schemas.recurrence import (
     RecurrenceCreate,
     RecurrenceRetrieve,
     RecurrenceUpdate,
 )
-from app.services.recurrence_service import RecurrenceService
+from app.services.recurrence import RecurrenceService
 
 router = APIRouter()
 

@@ -2,8 +2,8 @@ from common_lib.exceptions import NotFoundError
 import pytest
 from tests.factories import TaskCreateFactory
 
-from app.schemas.task_schemas import TaskUpdate
-from app.services.task_service import TaskService
+from app.schemas.task import TaskUpdate
+from app.services.task import TaskService
 
 
 @pytest.mark.asyncio

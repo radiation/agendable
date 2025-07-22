@@ -6,8 +6,12 @@ build-backend = "hatchling.build"
 # allow direct references like "{root:uri}/path"
 allow-direct-references = true
 
-[tool.uv]
-workspace = { members = ["common-lib", "meeting-service", "user-service"] }
+[tool.uv.workspace]
+members = [
+  "common-lib",
+  "meeting-service",
+  "user-service",
+]
 
 [tool.uv.sources]
 common-lib      = { workspace = true }
@@ -15,17 +19,17 @@ meeting-service = { workspace = true }
 user-service    = { workspace = true }
 
 [project]
-name            = "Agendable"
+name            = "agendable"
 version         = "0.1.0"
 description     = "Agendable is an app for managing recurring meetings"
 readme          = "README.md"
 requires-python = ">=3.13"
 
 dependencies = [
-  # your local workspace packages via hatchling’s {root:uri}
-  "common-lib      @ {root:uri}/common-lib/src",        # :contentReference[oaicite:0]{index=0}
-  "meeting-service @ {root:uri}/meeting-service",       # :contentReference[oaicite:1]{index=1}
-  "user-service    @ {root:uri}/user-service",          # :contentReference[oaicite:2]{index=2}
+  # local workspace packages
+  "common-lib",
+  "meeting-service",
+  "user-service",
 
   # runtime deps
   "fastapi>=0.115.11",

@@ -4,20 +4,21 @@
 FROM python:3.13-slim AS builder
 WORKDIR /app
 
-# Install UV
-RUN pip install --upgrade pip \
- && pip install uv
+RUN pip install --upgrade pip uv
 
-# Copy root-level project metadata and lockfile
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
+COPY common-lib/        common-lib/
+COPY meeting-service/   meeting-service/
+COPY user-service/      user-service/
 
-# Copy all workspace folders so UV can resolve path-deps
-COPY common-lib/ common-lib/
-COPY user-service/ user-service/
-
-# Create the service venv & install only its runtime deps
-WORKDIR /app/user-service
-RUN uv sync --project user-service --no-dev
+WORKDIR /app
+RUN uv sync \
+      --project agendable \
+      --no-install-package meeting-service \
+      --no-dev \
+ && uv pip install -e common-lib --upgrade --force-reinstall --verbose \
+ && uv pip show common-lib \
+ && ls -l /app/.venv/lib/python3.13/site-packages/common_lib*
 
 ###############
 # FINAL IMAGE #
@@ -25,17 +26,16 @@ RUN uv sync --project user-service --no-dev
 FROM python:3.13-slim
 WORKDIR /app/user-service
 
-# Copy prebuilt venv from the builder
-COPY --from=builder /app/user-service/.venv .venv
+COPY --from=builder /app/.venv /app/.venv
 
-# Copy only service code
+COPY --from=builder /app/common-lib/src/common_lib \
+     /app/.venv/lib/python3.13/site-packages/common_lib
+
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV PYTHONPATH=/app/user-service
+
 COPY --from=builder /app/user-service/app ./app
 
-# Activate venv
-ENV VIRTUAL_ENV=/app/user-service/.venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
 EXPOSE 8000
-
-# Run FastAPI app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

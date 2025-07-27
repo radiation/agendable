@@ -5,8 +5,13 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from common_lib.models import Base
 
-config = context.config
+from app.db.models.group import Group
+from app.db.models.role import Role
+from app.db.models.user import User
+from app.db.models.relationships import group_users, user_roles
 
+config = context.config
+target_metadata = Base.metadata
 
 def get_url():
     url = os.getenv("USER_DB_URL", "postgresql://user:password@postgres/user_db")

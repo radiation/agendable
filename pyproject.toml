@@ -30,21 +30,6 @@ dependencies = [
   "common-lib",
   "meeting-service",
   "user-service",
-
-  # runtime deps
-  "fastapi>=0.115.11",
-  "uvicorn>=0.34.3",
-  "pydantic>=2.10.6",
-  "pydantic-settings>=2.8.1",
-  "sqlalchemy>=2.0.39",
-  "redis>=5.2.1",
-  "httpx>=0.28.1",
-  "loguru>=0.7.3",
-  "greenlet>=3.1.1",
-  "python-dateutil>=2.9.0.post0",
-  "asyncpg>=0.30.0",
-  "aiosqlite>=0.21.0",
-  "psycopg2-binary>=2.9.10",
 ]
 
 [dependency-groups]

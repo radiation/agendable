@@ -12,7 +12,7 @@ class RedisClient:
         self.redis_password = os.getenv("REDIS_PASSWORD", None)
 
         # Initialize the Redis client
-        self.client = Redis(
+        self.client: Redis = Redis(
             host=self.redis_host,
             port=self.redis_port,
             db=self.redis_db,

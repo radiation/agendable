@@ -25,15 +25,22 @@ services:
     build:
       context: .
       dockerfile: user-service/Dockerfile
-    command: uvicorn main:app --host 0.0.0.0 --port ${USER_SERVICE_PORT} --reload
+      args:
+        PROJECT_NAME: user-service
+    command: >
+      /bin/bash -c "
+        alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port ${USER_SERVICE_PORT} --reload
+      "
     environment:
       - DATABASE_URL=${USER_DB_URL}
-      - PYTHONPATH=/
+      - PYTHONPATH=/app/user-service:/app/common-lib/src
     env_file:
       - .env
     volumes:
       - ${USER_SERVICE_PATH}/app:/app/user-service/app
       - ${USER_SERVICE_PATH}/alembic:/app/user-service/alembic
+      - ./common-lib:/app/common-lib
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,15 +52,22 @@ services:
     build:
       context: .
       dockerfile: meeting-service/Dockerfile
-    command: uvicorn main:app --host 0.0.0.0 --port ${MEETING_SERVICE_PORT} --reload
+      args:
+        PROJECT_NAME: meeting-service
+    command: >
+      /bin/bash -c "
+        alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port ${MEETING_SERVICE_PORT} --reload
+      "
     environment:
       - DATABASE_URL=${MEETING_DB_URL}
-      - PYTHONPATH=/
+      - PYTHONPATH=/app/meeting-service:/app/common-lib/src
     env_file:
       - .env
     volumes:
       - ${MEETING_SERVICE_PATH}/app:/app/meeting-service/app
       - ${MEETING_SERVICE_PATH}/alembic:/app/meeting-service/alembic
+      - ./common-lib:/app/common-lib
     depends_on:
       postgres:
         condition: service_healthy

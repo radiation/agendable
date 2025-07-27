@@ -74,7 +74,13 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     logger.info("Lifespan shutdown complete.")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Meeting Service",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/meeting_docs",
+    redoc_url=None,
+)
 
 # Access the secret key
 SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")

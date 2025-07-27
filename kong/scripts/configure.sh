@@ -92,7 +92,7 @@ create_service "user-service" "http://user-service:8004"
 create_service "meeting-service" "http://meeting-service:8005"
 
 # Create Routes for User Service
-USER_ROUTES=("user_service_docs:/docs" "auth_route:/auth" "users_route:/users" \
+USER_ROUTES=("user_docs_route:/user_docs" "auth_route:/auth" "users_route:/users" \
              "roles_route:/roles" "groups_route:/groups" "openapi_json:/openapi.json")
 for ROUTE in "${USER_ROUTES[@]}"; do
     NAME=$(echo "$ROUTE" | /usr/bin/cut -d':' -f1)
@@ -101,7 +101,7 @@ for ROUTE in "${USER_ROUTES[@]}"; do
 done
 
 # Create Routes for Meeting Service
-MEETING_ROUTES=("meeting_service_docs:/docs" "meetings_route:/meetings" \
+MEETING_ROUTES=("meetings_docs_route:/meeting_docs" "meetings_route:/meetings" \
                 "recurrences_route:/recurrences" \
                 "tasks_route:/tasks" "tasks_route:/tasks" \
                 "openapi_json:/openapi.json" "meeting_users_route:/meeting_users")

@@ -77,6 +77,15 @@ services:
       - web
       - postgres
 
+  web-ui:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    ports:
+      - "${WEB_UI_PORT}:${WEB_UI_PORT}"
+    networks:
+      - web
+
   redis:
     image: redis:latest
     command: ["redis-server", "--appendonly", "yes"]

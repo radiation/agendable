@@ -8,6 +8,9 @@ load_dotenv()
 
 
 class Settings(BaseSettings):
+    # Service name
+    SERVICE_NAME: str = os.getenv("SERVICE_NAME", "user-service")
+
     # Secret key for token generation
     SECRET_KEY: str = os.getenv("SECRET_KEY", "default_secret_key")
     print("Settings SECRET_KEY: ", SECRET_KEY)

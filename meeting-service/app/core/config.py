@@ -8,6 +8,7 @@ load_dotenv()
 
 
 class Settings(BaseSettings):
+    SERVICE_NAME: str = os.getenv("SERVICE_NAME", "meeting-service")
     TEST_DATABASE_URL: str = "sqlite+aiosqlite:///./test.db"
     DATABASE_URL: str = "sqlite:///./test.db"
     SECRET_KEY: str = os.getenv("SECRET_KEY", "default_secret_key")

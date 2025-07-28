@@ -35,6 +35,7 @@ services:
     environment:
       - DATABASE_URL=${USER_DB_URL}
       - PYTHONPATH=/app/user-service:/app/common-lib/src
+      - SERVICE_NAME=user-service
     env_file:
       - .env
     volumes:
@@ -62,6 +63,7 @@ services:
     environment:
       - DATABASE_URL=${MEETING_DB_URL}
       - PYTHONPATH=/app/meeting-service:/app/common-lib/src
+      - SERVICE_NAME=meeting-service
     env_file:
       - .env
     volumes:

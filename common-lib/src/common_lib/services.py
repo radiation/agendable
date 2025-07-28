@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Any, Generic, Optional, TypeVar, Union
 from uuid import UUID
 
@@ -23,17 +24,25 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self.repo = repo
         self.model_name = self.repo.model.__name__
         self.redis_client = redis_client
+        self.service_name = os.getenv("SERVICE_NAME")
+        if not self.service_name:
+            raise RuntimeError("SERVICE_NAME env var is required")
 
     def _get_model_name(self) -> str:
         return self.repo.model.__name__
 
-    async def _publish_event(self, event_type: str, payload: dict[str, Any]) -> None:
+    async def _publish_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
         for sensitive in ("password", "hashed_password"):
             payload.pop(sensitive, None)
         event = {
             "event_type": event_type,
             "model": self._get_model_name(),
             "payload": payload,
+            "source": self.service_name,
         }
         channel = f"{self._get_model_name().lower()}-events"
         logger.info(f"Publishing event to channel {channel}: {event}")

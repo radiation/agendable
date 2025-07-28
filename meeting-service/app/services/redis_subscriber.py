@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 
+from app.core.config import settings
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.task import TaskService
 from app.services.user import UserService
@@ -48,6 +49,12 @@ class RedisSubscriber:
             logger.warning(f"Error in listening to events: {exc}")
 
     async def handle_event(self, event: dict[str, Any], channel: str) -> None:
+        # Ignore events from self to prevent infinite loops
+        logger.debug(f"Handling event from channel {channel}: {event}")
+        if event["source"] == settings.SERVICE_NAME:
+            logger.debug(f"Ignoring event from self: {event}")
+            return
+
         event_type = event["event_type"]
         event_data = event["payload"]
 

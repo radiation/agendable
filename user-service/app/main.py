@@ -11,9 +11,7 @@ from fastapi import FastAPI
 
 from app.api.v1.routes import auth, group, role, user
 
-app = FastAPI(
-    title="User Service", version="1.0.0", docs_url="/user_docs", redoc_url=None
-)
+app = FastAPI(title="User Service", version="1.0.0")
 
 
 # Register exception handlers

@@ -8,8 +8,6 @@ from starlette.responses import HTMLResponse, Response
 app = FastAPI(
     title="Web UI",
     version="1.0.0",
-    docs_url="/web_ui_docs",
-    redoc_url=None,
     debug=(os.getenv("ENV", "dev") == "dev"),
 )
 templates = Jinja2Templates(directory="templates")

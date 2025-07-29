@@ -2,6 +2,11 @@
 
 echo "Adding services & routes to ${KONG_URL}..."
 
+# Hostnames
+USER_HOST="user-api.agendable.local"
+MEETING_HOST="meeting-api.agendable.local"
+UI_HOST="web-ui.agendable.local"
+
 # Helper Functions
 create_service() {
     local SERVICE_NAME=$1
@@ -22,16 +27,16 @@ create_service() {
 create_route() {
     local SERVICE_NAME=$1
     local ROUTE_NAME=$2
-    local PATH=$3
+    local HOSTNAME=$3
 
-    ROUTE_EXISTS=$(/usr/bin/curl -s ${KONG_URL}/routes/$ROUTE_NAME | /usr/bin/jq -r '.name')
+    ROUTE_EXISTS=$(/usr/bin/curl -s ${KONG_URL}/routes/$ROUTE_NAME | jq -r '.name')
     if [ "$ROUTE_EXISTS" != "$ROUTE_NAME" ]; then
-        echo "Creating route $ROUTE_NAME..."
+        echo "Creating host‐based route $ROUTE_NAME for $HOSTNAME..."
         /usr/bin/curl -i -X POST \
             --url ${KONG_URL}/services/$SERVICE_NAME/routes \
             --data "name=$ROUTE_NAME" \
-            --data "paths[]=$PATH" \
-            --data 'strip_path=false'
+            --data "hosts[]=$HOSTNAME" \
+            --data "strip_path=false"
     else
         echo "Route $ROUTE_NAME already exists."
     fi
@@ -86,79 +91,12 @@ associate_jwt() {
     fi
 }
 
-# Main Script
-# Create Services
-create_service "user-service" "http://user-service:8004"
+# 1) Services
+create_service "user-service"    "http://user-service:8004"
 create_service "meeting-service" "http://meeting-service:8005"
-create_service "web-ui" "http://web-ui:8002"
+create_service "web-ui"          "http://web-ui:8002"
 
-# Create Routes for User Service
-USER_ROUTES=("user_docs_route:/user_docs" "auth_route:/auth" "users_route:/users" \
-             "roles_route:/roles" "groups_route:/groups" "openapi_json:/openapi.json")
-for ROUTE in "${USER_ROUTES[@]}"; do
-    NAME=$(echo "$ROUTE" | /usr/bin/cut -d':' -f1)
-    PATH=$(echo "$ROUTE" | /usr/bin/cut -d':' -f2)
-    create_route "user-service" "$NAME" "$PATH"
-done
-
-# Create Routes for Meeting Service
-MEETING_ROUTES=("meetings_docs_route:/meeting_docs" "meetings_route:/meetings" \
-                "recurrences_route:/recurrences" \
-                "tasks_route:/tasks" "tasks_route:/tasks" \
-                "openapi_json:/openapi.json" "meeting_users_route:/meeting_users")
-for ROUTE in "${MEETING_ROUTES[@]}"; do
-    NAME=$(echo "$ROUTE" | /usr/bin/cut -d':' -f1)
-    PATH=$(echo "$ROUTE" | /usr/bin/cut -d':' -f2)
-    create_route "meeting-service" "$NAME" "$PATH"
-done
-
-# Create Routes for Web UI
-WEB_UI_ROUTES=("register_route:/register" "web_ui_docs_route:/web_ui_docs" \
-               "web_ui_route:/web_ui" "openapi_json:/openapi.json")
-for ROUTE in "${WEB_UI_ROUTES[@]}"; do
-    NAME=$(echo "$ROUTE" | /usr/bin/cut -d':' -f1)
-    PATH=$(echo "$ROUTE" | /usr/bin/cut -d':' -f2)
-    create_route "web-ui" "$NAME" "$PATH"
-done
-
-# Enable Plugins
-enable_plugin "meeting-service" "jwt" \
-    --data "config.claims_to_verify=exp" \
-    --data "config.key_claim_name=iss" \
-    --data "config.secret_is_base64=false"
-
-enable_plugin "meeting-service" "request-transformer" \
-    --data "config.add.headers=X-User-ID:\$claims.sub" \
-    --data "config.add.headers=X-User-Email:\$claims.email"
-
-enable_plugin "meeting-service" "cors" \
-    --data "config.origins=*" \
-    --data "config.methods[]=GET" \
-    --data "config.methods[]=HEAD" \
-    --data "config.methods[]=PUT" \
-    --data "config.methods[]=PATCH" \
-    --data "config.methods[]=POST" \
-    --data "config.methods[]=DELETE" \
-    --data "config.methods[]=OPTIONS" \
-    --data "config.headers[]=Content-Type" \
-    --data "config.headers[]=Authorization" \
-    --data "config.exposed_headers[]=Authorization" \
-    --data "config.credentials=true"
-
-enable_plugin "user-service" "cors" \
-    --data "config.origins=*" \
-    --data "config.methods[]=GET" \
-    --data "config.methods[]=HEAD" \
-    --data "config.methods[]=PUT" \
-    --data "config.methods[]=PATCH" \
-    --data "config.methods[]=POST" \
-    --data "config.methods[]=DELETE" \
-    --data "config.methods[]=OPTIONS" \
-    --data "config.headers[]=Content-Type" \
-    --data "config.headers[]=Authorization" \
-    --data "config.exposed_headers[]=Authorization" \
-    --data "config.credentials=true"
-
-# Create Consumer and Associate JWT
-create_consumer "user-service-consumer"
-associate_jwt "user-service-consumer" "user-service" "$SECRET_KEY"
+# 2) Host‐based routes
+create_route "user-service"    "user-service-route"    "$USER_HOST"
+create_route "meeting-service" "meeting-service-route" "$MEETING_HOST"
+create_route "web-ui"          "web-ui-route"          "$UI_HOST"

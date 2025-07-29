@@ -14,12 +14,14 @@ COPY pyproject.toml uv.lock ./
 COPY common-lib/        common-lib/
 COPY user-service/      user-service/
 COPY meeting-service/   meeting-service/
+COPY web-ui/            web-ui/
 
 # Sync only the current service (excluding source install)
 RUN uv sync \
       --project meeting-service \
       --no-install-package user-service \
       --no-install-package meeting-service \
+      --no-install-package web-ui \
       --no-dev
 
 ###############

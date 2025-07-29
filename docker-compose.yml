@@ -79,8 +79,8 @@ services:
 
   web-ui:
     build:
-      context: ./web-ui
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: web-ui/Dockerfile
     ports:
       - "${WEB_UI_PORT}:${WEB_UI_PORT}"
     networks:

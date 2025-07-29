@@ -90,6 +90,7 @@ associate_jwt() {
 # Create Services
 create_service "user-service" "http://user-service:8004"
 create_service "meeting-service" "http://meeting-service:8005"
+create_service "web-ui" "http://web-ui:8002"
 
 # Create Routes for User Service
 USER_ROUTES=("user_docs_route:/user_docs" "auth_route:/auth" "users_route:/users" \
@@ -109,6 +110,15 @@ for ROUTE in "${MEETING_ROUTES[@]}"; do
     NAME=$(echo "$ROUTE" | /usr/bin/cut -d':' -f1)
     PATH=$(echo "$ROUTE" | /usr/bin/cut -d':' -f2)
     create_route "meeting-service" "$NAME" "$PATH"
+done
+
+# Create Routes for Web UI
+WEB_UI_ROUTES=("register_route:/register" "web_ui_docs_route:/web_ui_docs" \
+               "web_ui_route:/web_ui" "openapi_json:/openapi.json")
+for ROUTE in "${WEB_UI_ROUTES[@]}"; do
+    NAME=$(echo "$ROUTE" | /usr/bin/cut -d':' -f1)
+    PATH=$(echo "$ROUTE" | /usr/bin/cut -d':' -f2)
+    create_route "web-ui" "$NAME" "$PATH"
 done
 
 # Enable Plugins

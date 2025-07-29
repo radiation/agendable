@@ -18,7 +18,7 @@ COPY web-ui/            web-ui/
 
 # Sync only the current service (excluding source install)
 RUN uv sync \
-      --project user-service \
+      --project web-ui \
       --no-install-package user-service \
       --no-install-package meeting-service \
       --no-install-package web-ui \
@@ -28,18 +28,17 @@ RUN uv sync \
 # FINAL IMAGE #
 ###############
 FROM python:3.13-slim
-WORKDIR /app/user-service
+WORKDIR /app/web-ui
 
-# Copy virtual environment
+# Bring in the venv from the builder
 COPY --from=builder /app/.venv /app/.venv
 
-# Copy source files (just this service + shared lib)
-COPY --from=builder /app/user-service /app/user-service
-COPY --from=builder /app/common-lib/src/common_lib /app/.venv/lib/python3.13/site-packages/common_lib
+# Copy over just the web-ui source, templates & static assets
+COPY --from=builder /app/web-ui /app/web-ui/
 
 # Set env to use virtualenv
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Entrypoint
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]

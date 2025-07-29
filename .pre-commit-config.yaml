@@ -45,6 +45,13 @@ repos:
         types: [python]
         pass_filenames: false
 
+    -   id: mypy
+        name: mypy-web-ui
+        entry: mypy --config-file web-ui/mypy.ini web-ui
+        language: system
+        types: [python]
+        pass_filenames: false
+
 -   repo: https://github.com/PyCQA/pylint
     rev: v3.0.3
     hooks:
@@ -65,6 +72,13 @@ repos:
     -   id: pylint
         name: pylint-user-service
         entry: pylint --rcfile user-service/.pylintrc user-service
+        language: system
+        types: [python]
+        pass_filenames: false
+
+    -   id: pylint
+        name: pylint-web-ui
+        entry: pylint --rcfile web-ui/.pylintrc web-ui
         language: system
         types: [python]
         pass_filenames: false

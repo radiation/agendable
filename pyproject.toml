@@ -11,12 +11,14 @@ members = [
   "common-lib",
   "meeting-service",
   "user-service",
+  "web-ui",
 ]
 
 [tool.uv.sources]
 common-lib      = { workspace = true }
 meeting-service = { workspace = true }
 user-service    = { workspace = true }
+web-ui          = { workspace = true }
 
 [project]
 name            = "agendable"
@@ -30,6 +32,7 @@ dependencies = [
   "common-lib",
   "meeting-service",
   "user-service",
+  "web-ui",
 ]
 
 [dependency-groups]

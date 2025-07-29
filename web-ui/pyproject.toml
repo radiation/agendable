@@ -1,0 +1,21 @@
+[build-system]
+requires    = ["hatchling>=1.10"]
+build-backend = "hatchling.build"
+
+[project]
+name = "web-ui"
+version = "0.1.0"
+description = "Agendable web UI (FastAPI + Jinja2 + HTMX)"
+readme = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+  "fastapi>=0.95.0,<0.117",
+  "jinja2>=3.1,<4.0",
+  "aiofiles>=23.1,<24.0",
+  "uvicorn[standard]>=0.22,<1.0"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = []
+include = ["app.py", "templates/*", "static/*"]

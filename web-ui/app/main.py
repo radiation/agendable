@@ -3,7 +3,9 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.responses import HTMLResponse, Response
+from starlette.responses import HTMLResponse
+
+from .config import settings
 
 app = FastAPI(
     title="Web UI",
@@ -20,9 +22,16 @@ if app.debug:
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-@app.get("/register")
-async def register_form(request: Request) -> Response:
-    return templates.TemplateResponse("register.html", {"request": request})
+@app.get("/register", response_class=HTMLResponse)
+async def register_form(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "register.html",
+        {
+            "request": request,
+            "USER_API_BASE": settings.USER_API_BASE,
+            "MEETING_API_BASE": settings.MEETING_API_BASE,
+        },
+    )
 
 
 @app.get("/profile", response_class=HTMLResponse)

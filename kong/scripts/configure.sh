@@ -36,7 +36,8 @@ create_route() {
             --url ${KONG_URL}/services/$SERVICE_NAME/routes \
             --data "name=$ROUTE_NAME" \
             --data "hosts[]=$HOSTNAME" \
-            --data "strip_path=false"
+            --data "strip_path=false" \
+            --data "preserve_host=true"
     else
         echo "Route $ROUTE_NAME already exists."
     fi

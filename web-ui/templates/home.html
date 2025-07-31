@@ -1,0 +1,11 @@
+{# templates/home.html #}
+{% extends "base.html" %}
+
+{% block title %}Welcome – Agendable{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <h1>Welcome to Agendable!</h1>
+    <p>Use the nav above to <a href="{{ url_for('show_meetings') }}">view your meetings</a> or <a href="{{ url_for('show_create_meeting_form') }}">schedule a new one</a>.</p>
+  </div>
+{% endblock %}

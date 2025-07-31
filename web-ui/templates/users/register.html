@@ -1,14 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Register</title>
-    <!-- HTMX core -->
-    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
-    <!-- HTMX JSON-encoding extension -->
-    <script src="https://unpkg.com/htmx.org@1.9.2/dist/ext/json-enc.js"></script>
-  </head>
-  <body>
+{# templates/users/register.html #}
+{% extends "base.html" %}
+
+{% block title %}Register – Agendable{% endblock %}
+
+{% block content %}
+  <div class="container">
     <h1>Create an Account</h1>
 
     <form
@@ -53,5 +49,5 @@
     </form>
 
     <div id="feedback" style="margin-top:1em;"></div>
-  </body>
-</html>
+  </div>
+{% endblock %}

@@ -1,0 +1,18 @@
+{# templates/meetings/show_meetings.html #}
+{% extends "base.html" %}
+
+{% block title %}Your Meetings – Agendable{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Your Meetings</h1>
+
+  <div
+    id="meetings-list"
+    hx-get="{{ MEETING_API_BASE }}/meetings"
+    hx-trigger="load"
+    hx-swap="innerHTML">
+    <p>Loading your meetings…</p>
+  </div>
+</div>
+{% endblock %}

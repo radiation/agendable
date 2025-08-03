@@ -40,6 +40,7 @@ async def test_user_crud_operations(
                     "is_active": True,
                     "is_superuser": False,
                 },
+                "source": "user-service",
             }
         ),
     )
@@ -77,6 +78,7 @@ async def test_user_crud_operations(
                 "payload": {
                     "email": "updateduser@example.com",
                 },
+                "source": "user-service",
             }
         ),
     )
@@ -96,6 +98,7 @@ async def test_user_crud_operations(
                 "payload": {
                     "id": user_data["id"],
                 },
+                "source": "user-service",
             }
         ),
     )

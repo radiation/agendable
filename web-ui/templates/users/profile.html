@@ -1,16 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>User Profile</title>
-  </head>
-  <body>
-    <h1>Your Profile</h1>
-    <ul>
-      <li><strong>Email:</strong>     {{ user.email     }}</li>
-      <li><strong>First Name:</strong>{{ user.first_name }}</li>
-      <li><strong>Last Name:</strong> {{ user.last_name  }}</li>
-    </ul>
-    <p><a href="{{ USER_API_BASE }}/register">← Back to Register</a></p>
-  </body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Your Profile – Agendable{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Welcome, {{ user.first_name }}!</h1>
+
+  <dl>
+    <dt>Email</dt><dd>{{ user.email }}</dd>
+    <dt>First Name</dt><dd>{{ user.first_name }}</dd>
+    <dt>Last Name</dt><dd>{{ user.last_name }}</dd>
+    {# add more fields from your UserRetrieve model as needed #}
+  </dl>
+</div>
+{% endblock %}

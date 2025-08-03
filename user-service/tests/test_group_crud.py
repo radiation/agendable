@@ -34,6 +34,7 @@ async def test_group_crud_operations(
                     "name": "crudgroup",
                     "description": "Group for CRUD operations",
                 },
+                "source": "user-service",
             }
         ),
     )
@@ -60,6 +61,7 @@ async def test_group_crud_operations(
                 "event_type": "update",
                 "model": "Group",
                 "payload": {"name": "updatedgroup", "id": int(group_data["id"])},
+                "source": "user-service",
             }
         ),
     )
@@ -77,6 +79,7 @@ async def test_group_crud_operations(
                 "event_type": "delete",
                 "model": "Group",
                 "payload": {"id": int(group_data["id"])},
+                "source": "user-service",
             }
         ),
     )

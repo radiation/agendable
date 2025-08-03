@@ -11,14 +11,9 @@ class Settings(BaseSettings):
     SERVICE_NAME: str = os.getenv("SERVICE_NAME", "web-ui")
 
     # point at your Kong gateway + host-based or path-based route
-    USER_API_BASE: str = os.getenv(
-        "USER_API_BASE", "http://user-api.agendable.local:8000"
-    )
-    MEETING_API_BASE: str = os.getenv(
-        "MEETING_API_BASE", "http://meeting-api.agendable.local:8000"
-    )
+    USER_API_BASE: str = os.getenv("USER_API_BASE", "http://user-service:8004")
+    MEETING_API_BASE: str = os.getenv("MEETING_API_BASE", "http://meeting-service:8005")
 
-    # any other flags you need…
     # DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
 
 

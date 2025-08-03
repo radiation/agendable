@@ -25,6 +25,7 @@ from app.services.user import UserService
 
 # Use an in-memory SQLite database for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+SERVICE_NAME = "user-service"
 
 
 @pytest.fixture(name="engine", scope="function")

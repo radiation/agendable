@@ -1,53 +1,36 @@
 {# templates/users/register.html #}
 {% extends "base.html" %}
-
 {% block title %}Register – Agendable{% endblock %}
 
 {% block content %}
   <div class="container">
     <h1>Create an Account</h1>
 
+    {% if error %}
+      <div class="flash error">{{ error }}</div>
+    {% endif %}
+
     <form
-      id="register-form"
-      hx-post="{{ USER_API_BASE }}/auth/register"
-      hx-ext="json-enc"
-      hx-headers='{"Content-Type": "application/json"}'
-      hx-target="#feedback"
-      hx-swap="innerHTML"
-      hx-on="htmx:afterRequest:
-        if (event.detail.xhr.status === 200) {
-          const p = new URLSearchParams({
-            email:      email.value,
-            password:   password.value,
-            first_name: first_name.value,
-            last_name:  last_name.value
-          });
-          window.location = '/profile?' + p;
-        }"
+      method="post"
+      action="{{ url_for('register_post') }}"
     >
       <div>
         <label for="email">Email</label><br/>
         <input id="email" name="email" type="email" required />
       </div>
-
       <div>
         <label for="password">Password</label><br/>
         <input id="password" name="password" type="password" required />
       </div>
-
       <div>
         <label for="first_name">First Name</label><br/>
         <input id="first_name" name="first_name" type="text" required />
       </div>
-
       <div>
         <label for="last_name">Last Name</label><br/>
         <input id="last_name" name="last_name" type="text" required />
       </div>
-
       <button type="submit">Sign up</button>
     </form>
-
-    <div id="feedback" style="margin-top:1em;"></div>
   </div>
 {% endblock %}

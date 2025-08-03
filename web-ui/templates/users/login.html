@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Log In – Agendable{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Log In</h1>
+
+  {% if error %}
+    <div class="flash error">{{ error }}</div>
+  {% endif %}
+
+  <form
+    method="post"
+    action="{{ url_for('login_post') }}"
+  >
+    <div>
+      <label for="email">Email</label><br/>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        required
+        autofocus
+      />
+    </div>
+
+    <div style="margin-top:1rem;">
+      <label for="password">Password</label><br/>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        required
+      />
+    </div>
+
+    <div style="margin-top:1.5rem;">
+      <button type="submit">Log In</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -103,7 +103,7 @@ async def register(
             },
         )
 
-    if resp.status_code != 201:
+    if resp.status_code not in (200, 201):
         # registration failed
         return templates.TemplateResponse(
             "users/register.html",

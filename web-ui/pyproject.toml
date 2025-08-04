@@ -21,5 +21,8 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = []
-include = ["app.py", "templates/*", "static/*"]
+packages = ["app"]
+include = [
+  "app/templates/**",
+  "app/static/**",
+]

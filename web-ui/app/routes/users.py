@@ -15,7 +15,9 @@ async def login_page(request: Request) -> Any:
     return templates.TemplateResponse("users/login.html", {"request": request})
 
 
-@router.post("/login", response_class=HTMLResponse, name="login_post")
+@router.post(
+    "/login", response_class=HTMLResponse, response_model=None, name="login_post"
+)
 async def login(
     request: Request, email: str = Form(...), password: str = Form(...)
 ) -> Union[Any, RedirectResponse]:
@@ -66,7 +68,9 @@ async def register_form(request: Request) -> Any:
     )
 
 
-@router.post("/register", response_class=HTMLResponse, name="register_post")
+@router.post(
+    "/register", response_class=HTMLResponse, response_model=None, name="register_post"
+)
 async def register_post(
     request: Request,
     email: str = Form(...),
@@ -102,13 +106,14 @@ async def register_post(
     return RedirectResponse(url=request.url_for("login"), status_code=303)
 
 
-@router.get("/profile", response_class=HTMLResponse, name="profile")
+@router.get(
+    "/profile", response_class=HTMLResponse, response_model=None, name="profile"
+)
 async def profile(request: Request) -> Union[Any, RedirectResponse]:
     token = request.cookies.get("token")
     if not token:
         return RedirectResponse(url=router.url_path_for("login"), status_code=303)
 
-    # fetch the “/me” endpoint on your user-service
     async with httpx.AsyncClient() as client:
         user_resp = await client.get(
             f"{settings.USER_API_BASE}/users/me",
@@ -122,4 +127,26 @@ async def profile(request: Request) -> Union[Any, RedirectResponse]:
     user = user_resp.json()
     return templates.TemplateResponse(
         "users/profile.html", {"request": request, "user": user}
+    )
+
+
+@router.get("/list", response_class=HTMLResponse, response_model=None, name="user_list")
+async def user_list(request: Request) -> Union[Any, RedirectResponse]:
+    token = request.cookies.get("token")
+    if not token:
+        return RedirectResponse(url=request.url_for("login"), status_code=303)
+
+    async with httpx.AsyncClient() as client:
+        user_resp = await client.get(
+            f"{settings.USER_API_BASE}/users",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    # token expired or invalid
+    if user_resp.status_code != 200:
+        return RedirectResponse(url=request.url_for("login"), status_code=303)
+
+    users = user_resp.json()
+    return templates.TemplateResponse(
+        "users/list.html", {"request": request, "users": users}
     )

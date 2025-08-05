@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}List Users – Agendable{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Users</h1>
+    <div
+        id="users-list"
+        hx-get="{{ USER_API_BASE }}/users"
+        hx-trigger="load"
+        hx-swap="innerHTML">
+        <p>Loading users…</p>
+    </div>
+</div>
+{% endblock %}

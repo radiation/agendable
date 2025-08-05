@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Create Meeting – Agendable{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Create Meeting</h1>
+    <form
+        id="create-meeting-form"
+        hx-post="{{ MEETING_API_BASE }}/meetings"
+        hx-target="#meetings-list"
+        hx-swap="innerHTML">
+
+        <div class="form-group">
+        <label for="title">Meeting Title</label>
+        <input type="text" id="title" name="title" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" class="form-control"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Create Meeting</button>
+    </form>
+</div>
+{% endblock %}

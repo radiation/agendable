@@ -13,14 +13,18 @@ app = FastAPI(
     debug=(os.getenv("ENV", "dev") == "dev"),
 )
 
+
 BASE_DIR = Path(__file__).parent
 
+
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
 
 if app.debug:
     # clear jinja cache on each load
     templates.env.auto_reload = True
     templates.env.cache = {}
+
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 

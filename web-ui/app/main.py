@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.core.auth import AuthMiddleware
 from app.routes import home, meetings, users
 
 app = FastAPI(
@@ -12,7 +13,7 @@ app = FastAPI(
     version="1.0.0",
     debug=(os.getenv("ENV", "dev") == "dev"),
 )
-
+app.add_middleware(AuthMiddleware)
 
 BASE_DIR = Path(__file__).parent
 

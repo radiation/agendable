@@ -11,15 +11,20 @@ router = APIRouter(tags=["users"])
 
 
 @router.get("/login", response_class=HTMLResponse, name="login")
-async def login_page(request: Request) -> Any:
-    return templates.TemplateResponse("users/login.html", {"request": request})
+async def login_page(request: Request, next_url: str | None = None) -> Any:
+    return templates.TemplateResponse(
+        "users/login.html", {"request": request, "next": next_url or ""}
+    )
 
 
 @router.post(
     "/login", response_class=HTMLResponse, response_model=None, name="login_post"
 )
 async def login(
-    request: Request, email: str = Form(...), password: str = Form(...)
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    next_url: str | None = Form(None),
 ) -> Union[Any, RedirectResponse]:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -37,14 +42,17 @@ async def login(
 
     token = resp.json().get("access_token")
 
-    # set cookie, then redirect to profile
-    response = RedirectResponse(url=request.url_for("profile"), status_code=303)
+    # set cookie, then redirect to previous page or profile
+    response = RedirectResponse(
+        url=next_url or request.url_for("profile"), status_code=303
+    )
     response.set_cookie(
         key="token",
         value=token,
         httponly=True,
         max_age=3600,
         samesite="lax",
+        path="/",
     )
     return response
 
@@ -121,7 +129,7 @@ async def profile(request: Request) -> Union[Any, RedirectResponse]:
         )
 
     if user_resp.status_code != 200:
-        # token expired or invalid → back to login
+        # token expired or invalid, redirect to login
         return RedirectResponse(url=router.url_path_for("login"), status_code=303)
 
     user = user_resp.json()
@@ -138,7 +146,7 @@ async def user_list(request: Request) -> Union[Any, RedirectResponse]:
 
     async with httpx.AsyncClient() as client:
         user_resp = await client.get(
-            f"{settings.USER_API_BASE}/users",
+            f"{settings.USER_API_BASE}/users/",
             headers={"Authorization": f"Bearer {token}"},
         )
 

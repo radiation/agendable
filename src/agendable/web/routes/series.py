@@ -12,8 +12,12 @@ from starlette.responses import Response
 
 from agendable.auth import require_user
 from agendable.db import get_session
-from agendable.db.models import MeetingOccurrence, MeetingOccurrenceAttendee, User
-from agendable.db.repos import MeetingOccurrenceRepository, MeetingSeriesRepository
+from agendable.db.models import MeetingOccurrence, User
+from agendable.db.repos import (
+    MeetingOccurrenceAttendeeRepository,
+    MeetingOccurrenceRepository,
+    MeetingSeriesRepository,
+)
 from agendable.logging_config import log_with_fields
 from agendable.reminders import build_default_email_reminder
 from agendable.services import create_series_with_occurrences
@@ -214,13 +218,13 @@ async def create_series(
 
         attendee_user_ids.update(user.id for user in attendee_users)
 
+    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
     for occurrence in occurrences:
         for attendee_user_id in attendee_user_ids:
-            session.add(
-                MeetingOccurrenceAttendee(
-                    occurrence_id=occurrence.id,
-                    user_id=attendee_user_id,
-                )
+            await attendee_repo.add_link(
+                occurrence_id=occurrence.id,
+                user_id=attendee_user_id,
+                flush=False,
             )
 
     await session.commit()
@@ -302,7 +306,7 @@ async def add_series_attendee(
         attendee_user_id=attendee_user.id,
         occurrence_ids=occurrence_ids,
     )
-    added_count = add_missing_attendee_links(
+    added_count = await add_missing_attendee_links(
         session=session,
         attendee_user_id=attendee_user.id,
         occurrence_ids=occurrence_ids,

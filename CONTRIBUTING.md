@@ -33,6 +33,13 @@ For local OIDC testing and multi-user flows, see the Keycloak setup in `README.m
 - Prefer HTMX-first UI updates and progressive enhancement over heavy frontend frameworks.
 - For schema changes, include an Alembic migration unless you explicitly document why not needed.
 
+### Layer boundaries
+- Entry points (`agendable.cli`, app startup wiring, route handlers) should stay orchestration-focused: parse inputs, call services, shape responses.
+- Service modules (`src/agendable/services/`) own business rules and workflow policy (for example retry/backoff decisions, state transitions, and cross-entity flow).
+- Repository modules (`src/agendable/db/repos/`) own persistence/query shaping and CRUD helpers; avoid embedding business policy in repositories.
+- Integration/adapters (for example `src/agendable/reminders.py`) own provider-specific behavior and error translation (SMTP/Slack/etc.).
+- If logic answers "what should happen," it belongs in a service. If it answers "how data is stored/fetched," it belongs in a repository.
+
 ## Before opening a PR
 Run the same checks CI enforces:
 

@@ -5,11 +5,15 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agendable.db.models import MeetingOccurrence, MeetingOccurrenceAttendee, MeetingSeries, User
-from agendable.db.repos import MeetingOccurrenceRepository, MeetingSeriesRepository
+from agendable.db.models import MeetingOccurrence, MeetingSeries, User
+from agendable.db.repos import (
+    MeetingOccurrenceAttendeeRepository,
+    MeetingOccurrenceRepository,
+    MeetingSeriesRepository,
+    UserRepository,
+)
 from agendable.recurrence import build_rrule
 from agendable.web.routes.common import recurrence_label, templates
 
@@ -173,8 +177,8 @@ async def resolve_series_attendee_user(
     session: AsyncSession,
     email: str,
 ) -> User | None:
-    result = await session.execute(select(User).where(User.email == email))
-    return result.scalar_one_or_none()
+    users_repo = UserRepository(session)
+    return await users_repo.get_by_email(email)
 
 
 async def existing_attendee_occurrence_ids(
@@ -183,33 +187,23 @@ async def existing_attendee_occurrence_ids(
     attendee_user_id: uuid.UUID,
     occurrence_ids: list[uuid.UUID],
 ) -> set[uuid.UUID]:
-    if not occurrence_ids:
-        return set()
-
-    existing_links = (
-        await session.execute(
-            select(MeetingOccurrenceAttendee.occurrence_id).where(
-                MeetingOccurrenceAttendee.user_id == attendee_user_id,
-                MeetingOccurrenceAttendee.occurrence_id.in_(occurrence_ids),
-            )
-        )
-    ).scalars()
-    return set(existing_links)
+    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
+    return await attendee_repo.list_occurrence_ids_for_user(
+        user_id=attendee_user_id,
+        occurrence_ids=occurrence_ids,
+    )
 
 
-def add_missing_attendee_links(
+async def add_missing_attendee_links(
     *,
     session: AsyncSession,
     attendee_user_id: uuid.UUID,
     occurrence_ids: list[uuid.UUID],
     existing_occurrence_ids: set[uuid.UUID],
 ) -> int:
-    added_count = 0
-    for occurrence_id in occurrence_ids:
-        if occurrence_id in existing_occurrence_ids:
-            continue
-        session.add(
-            MeetingOccurrenceAttendee(occurrence_id=occurrence_id, user_id=attendee_user_id)
-        )
-        added_count += 1
-    return added_count
+    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
+    return await attendee_repo.add_missing_links(
+        user_id=attendee_user_id,
+        occurrence_ids=occurrence_ids,
+        existing_occurrence_ids=existing_occurrence_ids,
+    )

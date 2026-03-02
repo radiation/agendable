@@ -3,15 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from datetime import UTC, datetime
-
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from datetime import datetime
 
 import agendable.db as db
-from agendable.db.models import Base, MeetingOccurrence, MeetingSeries, Reminder, ReminderChannel
-from agendable.logging_config import configure_logging, log_with_fields
-from agendable.reminders import ReminderEmail, ReminderSender, as_utc, build_reminder_sender
+from agendable.db.models import Base, Reminder
+from agendable.db.repos import ReminderRepository
+from agendable.logging_config import configure_logging
+from agendable.reminders import ReminderSender, build_reminder_sender
+from agendable.services.reminder_delivery_service import run_due_reminders
 from agendable.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -22,49 +21,34 @@ async def _init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def _run_due_reminders(sender: ReminderSender | None = None) -> None:
-    selected_sender = sender if sender is not None else build_reminder_sender(get_settings())
-    now = datetime.now(UTC)
-    async with db.SessionMaker() as session:
-        result = await session.execute(
-            select(Reminder)
-            .options(
-                selectinload(Reminder.occurrence)
-                .selectinload(MeetingOccurrence.series)
-                .selectinload(MeetingSeries.owner),
-                selectinload(Reminder.occurrence).selectinload(MeetingOccurrence.tasks),
-            )
-            .where(Reminder.sent_at.is_(None))
-            .order_by(Reminder.send_at.asc())
+async def _claim_reminder_attempt(*, reminder: Reminder, now: datetime) -> bool:
+    settings = get_settings()
+    async with db.SessionMaker() as claim_session:
+        reminder_repo = ReminderRepository(claim_session)
+        was_claimed = await reminder_repo.try_claim_attempt(
+            reminder_id=reminder.id,
+            expected_attempt_count=reminder.attempt_count,
+            now=now,
+            claim_lease_seconds=settings.reminder_claim_lease_seconds,
         )
-        reminders = list(result.scalars().all())
+        if not was_claimed:
+            return False
+        await claim_session.commit()
 
-        sent = 0
-        skipped = 0
-        for reminder in reminders:
-            if as_utc(reminder.send_at) > now:
-                continue
+    reminder.attempt_count += 1
+    reminder.last_attempted_at = now
+    return True
 
-            if reminder.channel != ReminderChannel.email:
-                skipped += 1
-                continue
 
-            await selected_sender.send_email_reminder(
-                ReminderEmail(
-                    recipient_email=reminder.occurrence.series.owner.email,
-                    meeting_title=reminder.occurrence.series.title,
-                    scheduled_at=as_utc(reminder.occurrence.scheduled_at),
-                    incomplete_tasks=[
-                        task.title for task in reminder.occurrence.tasks if not task.is_done
-                    ],
-                )
-            )
-            reminder.sent_at = now
-            sent += 1
-
-        await session.commit()
-
-    log_with_fields(logger, logging.INFO, "reminder run complete", sent=sent, skipped=skipped)
+async def _run_due_reminders(sender: ReminderSender | None = None) -> None:
+    settings = get_settings()
+    selected_sender = sender if sender is not None else build_reminder_sender(settings)
+    await run_due_reminders(
+        sender=selected_sender,
+        logger=logger,
+        settings=settings,
+        claim_attempt=_claim_reminder_attempt,
+    )
 
 
 async def _run_reminders_worker(poll_seconds: int) -> None:

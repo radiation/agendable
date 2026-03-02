@@ -325,8 +325,7 @@ async def test_run_due_reminders_skips_send_when_claim_not_acquired(
     db_session.add(reminder)
     await db_session.commit()
 
-    async def fake_claim(*, session: AsyncSession, reminder: Reminder, now: datetime) -> bool:
-        _ = session
+    async def fake_claim(*, reminder: Reminder, now: datetime) -> bool:
         _ = reminder
         _ = now
         return False

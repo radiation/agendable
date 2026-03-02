@@ -24,6 +24,44 @@ class ReminderSender(Protocol):
     async def send_email_reminder(self, reminder: ReminderEmail) -> None: ...
 
 
+@dataclass(slots=True)
+class ReminderDeliveryError(Exception):
+    reason_code: str
+    is_transient: bool
+
+
+class TransientReminderDeliveryError(ReminderDeliveryError):
+    def __init__(self, reason_code: str) -> None:
+        super().__init__(reason_code=reason_code, is_transient=True)
+
+
+class TerminalReminderDeliveryError(ReminderDeliveryError):
+    def __init__(self, reason_code: str) -> None:
+        super().__init__(reason_code=reason_code, is_transient=False)
+
+
+def classify_smtp_error(exc: Exception) -> ReminderDeliveryError:
+    if isinstance(
+        exc,
+        (
+            smtplib.SMTPConnectError,
+            smtplib.SMTPServerDisconnected,
+            TimeoutError,
+        ),
+    ):
+        return TransientReminderDeliveryError("smtp_unavailable")
+
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return TerminalReminderDeliveryError("smtp_auth_failed")
+
+    if isinstance(exc, smtplib.SMTPResponseException):
+        if 400 <= exc.smtp_code < 500:
+            return TransientReminderDeliveryError("smtp_transient_response")
+        return TerminalReminderDeliveryError("smtp_permanent_response")
+
+    return TerminalReminderDeliveryError("smtp_unknown")
+
+
 def as_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
@@ -48,6 +86,7 @@ def build_default_email_reminder(
         occurrence_id=occurrence_id,
         channel=ReminderChannel.email,
         send_at=send_at,
+        next_attempt_at=send_at,
         sent_at=None,
     )
 
@@ -80,7 +119,10 @@ class SmtpReminderSender:
         self.timeout_seconds = timeout_seconds
 
     async def send_email_reminder(self, reminder: ReminderEmail) -> None:
-        await asyncio.to_thread(self._send_sync, reminder)
+        try:
+            await asyncio.to_thread(self._send_sync, reminder)
+        except Exception as exc:
+            raise classify_smtp_error(exc) from exc
 
     def _send_sync(self, reminder: ReminderEmail) -> None:
         message = EmailMessage()

@@ -85,6 +85,8 @@ Reminder scheduling defaults:
 - `AGENDABLE_ENABLE_DEFAULT_EMAIL_REMINDERS` (default `true`)
 - `AGENDABLE_DEFAULT_EMAIL_REMINDER_MINUTES_BEFORE` (default `60`)
 - `AGENDABLE_REMINDER_WORKER_POLL_SECONDS` (default `60`)
+- `AGENDABLE_REMINDER_RETRY_MAX_ATTEMPTS` (default `3`)
+- `AGENDABLE_REMINDER_RETRY_BACKOFF_SECONDS` (default `60`, exponential backoff base)
 
 Per-series override:
 

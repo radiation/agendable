@@ -3,18 +3,46 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from datetime import UTC, datetime
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import agendable.db as db
-from agendable.db.models import Base, MeetingOccurrence, MeetingSeries, Reminder, ReminderChannel
+from agendable.db.models import (
+    Base,
+    MeetingOccurrence,
+    MeetingSeries,
+    Reminder,
+    ReminderChannel,
+    ReminderDeliveryStatus,
+)
 from agendable.logging_config import configure_logging, log_with_fields
-from agendable.reminders import ReminderEmail, ReminderSender, as_utc, build_reminder_sender
+from agendable.reminders import (
+    ReminderDeliveryError,
+    ReminderEmail,
+    ReminderSender,
+    as_utc,
+    build_reminder_sender,
+)
 from agendable.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class ReminderRunStats:
+    attempted: int = 0
+    sent: int = 0
+    failed: int = 0
+    skipped: int = 0
+    retried: int = 0
+    failure_reason_counts: Counter[str] = field(default_factory=Counter)
 
 
 async def _init_db() -> None:
@@ -22,9 +50,84 @@ async def _init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
+def _is_reminder_due(reminder: Reminder, now: datetime) -> bool:
+    next_attempt_at = reminder.next_attempt_at if reminder.next_attempt_at else reminder.send_at
+    return as_utc(next_attempt_at) <= now
+
+
+async def _claim_reminder_attempt(
+    *,
+    session: AsyncSession,
+    reminder: Reminder,
+    now: datetime,
+) -> bool:
+    claim_result = await session.execute(
+        update(Reminder)
+        .where(Reminder.id == reminder.id)
+        .where(Reminder.sent_at.is_(None))
+        .where(
+            Reminder.delivery_status.in_(
+                [ReminderDeliveryStatus.pending, ReminderDeliveryStatus.retry_scheduled]
+            )
+        )
+        .where(Reminder.attempt_count == reminder.attempt_count)
+        .where(or_(Reminder.next_attempt_at.is_(None), Reminder.next_attempt_at <= now))
+        .values(
+            attempt_count=Reminder.attempt_count + 1,
+            last_attempted_at=now,
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+    claim_rowcount = cast(CursorResult[object], claim_result).rowcount
+    if claim_rowcount != 1:
+        return False
+
+    reminder.attempt_count += 1
+    reminder.last_attempted_at = now
+    return True
+
+
+def _build_reminder_email(reminder: Reminder) -> ReminderEmail:
+    return ReminderEmail(
+        recipient_email=reminder.occurrence.series.owner.email,
+        meeting_title=reminder.occurrence.series.title,
+        scheduled_at=as_utc(reminder.occurrence.scheduled_at),
+        incomplete_tasks=[task.title for task in reminder.occurrence.tasks if not task.is_done],
+    )
+
+
+def _log_run_summary(*, started_at: datetime, stats: ReminderRunStats) -> None:
+    duration_ms = int((datetime.now(UTC) - started_at).total_seconds() * 1000)
+    log_with_fields(
+        logger,
+        logging.INFO,
+        "reminder run complete",
+        attempted=stats.attempted,
+        sent=stats.sent,
+        failed=stats.failed,
+        skipped=stats.skipped,
+        retried=stats.retried,
+        duration_ms=duration_ms,
+    )
+
+    for reason_code, count in sorted(stats.failure_reason_counts.items()):
+        log_with_fields(
+            logger,
+            logging.INFO,
+            "reminder run failure reason",
+            reason_code=reason_code,
+            count=count,
+        )
+
+
 async def _run_due_reminders(sender: ReminderSender | None = None) -> None:
-    selected_sender = sender if sender is not None else build_reminder_sender(get_settings())
-    now = datetime.now(UTC)
+    settings = get_settings()
+    selected_sender = sender if sender is not None else build_reminder_sender(settings)
+    started_at = datetime.now(UTC)
+    now = started_at
+    stats = ReminderRunStats()
+
     async with db.SessionMaker() as session:
         result = await session.execute(
             select(Reminder)
@@ -35,36 +138,77 @@ async def _run_due_reminders(sender: ReminderSender | None = None) -> None:
                 selectinload(Reminder.occurrence).selectinload(MeetingOccurrence.tasks),
             )
             .where(Reminder.sent_at.is_(None))
-            .order_by(Reminder.send_at.asc())
+            .where(
+                Reminder.delivery_status.in_(
+                    [ReminderDeliveryStatus.pending, ReminderDeliveryStatus.retry_scheduled]
+                )
+            )
+            .order_by(Reminder.next_attempt_at.asc())
         )
         reminders = list(result.scalars().all())
-
-        sent = 0
-        skipped = 0
         for reminder in reminders:
-            if as_utc(reminder.send_at) > now:
+            if not _is_reminder_due(reminder, now):
                 continue
 
             if reminder.channel != ReminderChannel.email:
-                skipped += 1
+                reminder.delivery_status = ReminderDeliveryStatus.skipped
+                reminder.failure_reason_code = "unsupported_channel"
+                stats.skipped += 1
                 continue
 
-            await selected_sender.send_email_reminder(
-                ReminderEmail(
-                    recipient_email=reminder.occurrence.series.owner.email,
-                    meeting_title=reminder.occurrence.series.title,
-                    scheduled_at=as_utc(reminder.occurrence.scheduled_at),
-                    incomplete_tasks=[
-                        task.title for task in reminder.occurrence.tasks if not task.is_done
-                    ],
-                )
-            )
+            was_claimed = await _claim_reminder_attempt(session=session, reminder=reminder, now=now)
+            if not was_claimed:
+                continue
+
+            stats.attempted += 1
+
+            try:
+                await selected_sender.send_email_reminder(_build_reminder_email(reminder))
+            except ReminderDeliveryError as exc:
+                reminder.failure_reason_code = exc.reason_code
+                stats.failure_reason_counts[exc.reason_code] += 1
+                if (
+                    exc.is_transient
+                    and reminder.attempt_count < settings.reminder_retry_max_attempts
+                ):
+                    backoff_seconds = settings.reminder_retry_backoff_seconds * (
+                        2 ** (reminder.attempt_count - 1)
+                    )
+                    reminder.next_attempt_at = now + timedelta(seconds=backoff_seconds)
+                    reminder.delivery_status = ReminderDeliveryStatus.retry_scheduled
+                    stats.retried += 1
+                    log_with_fields(
+                        logger,
+                        logging.WARNING,
+                        "reminder delivery transient failure",
+                        reminder_id=reminder.id,
+                        reason_code=exc.reason_code,
+                        attempt_count=reminder.attempt_count,
+                        next_attempt_at=reminder.next_attempt_at.isoformat(),
+                        backoff_seconds=backoff_seconds,
+                    )
+                else:
+                    reminder.delivery_status = ReminderDeliveryStatus.failed_terminal
+                    stats.failed += 1
+                    log_with_fields(
+                        logger,
+                        logging.ERROR,
+                        "reminder delivery terminal failure",
+                        reminder_id=reminder.id,
+                        reason_code=exc.reason_code,
+                        attempt_count=reminder.attempt_count,
+                    )
+                continue
+
             reminder.sent_at = now
-            sent += 1
+            reminder.next_attempt_at = now
+            reminder.delivery_status = ReminderDeliveryStatus.sent
+            reminder.failure_reason_code = None
+            stats.sent += 1
 
         await session.commit()
 
-    log_with_fields(logger, logging.INFO, "reminder run complete", sent=sent, skipped=skipped)
+    _log_run_summary(started_at=started_at, stats=stats)
 
 
 async def _run_reminders_worker(poll_seconds: int) -> None:

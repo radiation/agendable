@@ -27,6 +27,14 @@ class ReminderChannel(enum.StrEnum):
     slack = "slack"
 
 
+class ReminderDeliveryStatus(enum.StrEnum):
+    pending = "pending"
+    retry_scheduled = "retry_scheduled"
+    sent = "sent"
+    failed_terminal = "failed_terminal"
+    skipped = "skipped"
+
+
 class UserRole(enum.StrEnum):
     user = "user"
     admin = "admin"
@@ -224,6 +232,16 @@ class Reminder(Base):
 
     channel: Mapped[ReminderChannel] = mapped_column(Enum(ReminderChannel, name="reminder_channel"))
     send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    delivery_status: Mapped[ReminderDeliveryStatus] = mapped_column(
+        Enum(ReminderDeliveryStatus, name="reminder_delivery_status"),
+        default=ReminderDeliveryStatus.pending,
+    )
+    failure_reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     occurrence: Mapped[MeetingOccurrence] = relationship(back_populates="reminders")

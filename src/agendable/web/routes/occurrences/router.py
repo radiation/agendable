@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
@@ -14,12 +13,12 @@ from agendable.auth import require_user
 from agendable.db import get_session
 from agendable.db.models import (
     AgendaItem,
-    MeetingOccurrenceAttendee,
     Task,
     User,
 )
 from agendable.db.repos import (
     AgendaItemRepository,
+    MeetingOccurrenceAttendeeRepository,
     MeetingOccurrenceRepository,
     TaskRepository,
     UserRepository,
@@ -219,17 +218,13 @@ async def add_attendee(
     if attendee_user is None:
         raise HTTPException(status_code=400, detail="Invalid attendee")
 
-    existing = (
-        await session.execute(
-            select(MeetingOccurrenceAttendee).where(
-                MeetingOccurrenceAttendee.occurrence_id == occurrence_id,
-                MeetingOccurrenceAttendee.user_id == attendee_user.id,
-            )
-        )
-    ).scalar_one_or_none()
+    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
+    existing = await attendee_repo.get_by_occurrence_and_user(occurrence_id, attendee_user.id)
     if existing is None:
-        session.add(
-            MeetingOccurrenceAttendee(occurrence_id=occurrence_id, user_id=attendee_user.id)
+        await attendee_repo.add_link(
+            occurrence_id=occurrence_id,
+            user_id=attendee_user.id,
+            flush=False,
         )
         await session.commit()
         record_occurrence_activity(

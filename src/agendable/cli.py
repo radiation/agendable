@@ -6,22 +6,17 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import cast
 
-from sqlalchemy import or_, select, update
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 import agendable.db as db
 from agendable.db.models import (
     Base,
-    MeetingOccurrence,
-    MeetingSeries,
     Reminder,
     ReminderChannel,
     ReminderDeliveryStatus,
 )
+from agendable.db.repos import ReminderRepository
 from agendable.logging_config import configure_logging, log_with_fields
 from agendable.reminders import (
     ReminderDeliveryError,
@@ -61,26 +56,13 @@ async def _claim_reminder_attempt(
     reminder: Reminder,
     now: datetime,
 ) -> bool:
-    claim_result = await session.execute(
-        update(Reminder)
-        .where(Reminder.id == reminder.id)
-        .where(Reminder.sent_at.is_(None))
-        .where(
-            Reminder.delivery_status.in_(
-                [ReminderDeliveryStatus.pending, ReminderDeliveryStatus.retry_scheduled]
-            )
-        )
-        .where(Reminder.attempt_count == reminder.attempt_count)
-        .where(or_(Reminder.next_attempt_at.is_(None), Reminder.next_attempt_at <= now))
-        .values(
-            attempt_count=Reminder.attempt_count + 1,
-            last_attempted_at=now,
-        )
-        .execution_options(synchronize_session=False)
+    reminder_repo = ReminderRepository(session)
+    was_claimed = await reminder_repo.try_claim_attempt(
+        reminder_id=reminder.id,
+        expected_attempt_count=reminder.attempt_count,
+        now=now,
     )
-
-    claim_rowcount = cast(CursorResult[object], claim_result).rowcount
-    if claim_rowcount != 1:
+    if not was_claimed:
         return False
 
     reminder.attempt_count += 1
@@ -129,23 +111,8 @@ async def _run_due_reminders(sender: ReminderSender | None = None) -> None:
     stats = ReminderRunStats()
 
     async with db.SessionMaker() as session:
-        result = await session.execute(
-            select(Reminder)
-            .options(
-                selectinload(Reminder.occurrence)
-                .selectinload(MeetingOccurrence.series)
-                .selectinload(MeetingSeries.owner),
-                selectinload(Reminder.occurrence).selectinload(MeetingOccurrence.tasks),
-            )
-            .where(Reminder.sent_at.is_(None))
-            .where(
-                Reminder.delivery_status.in_(
-                    [ReminderDeliveryStatus.pending, ReminderDeliveryStatus.retry_scheduled]
-                )
-            )
-            .order_by(Reminder.next_attempt_at.asc())
-        )
-        reminders = list(result.scalars().all())
+        reminder_repo = ReminderRepository(session)
+        reminders = await reminder_repo.list_pending_for_delivery()
         for reminder in reminders:
             if not _is_reminder_due(reminder, now):
                 continue

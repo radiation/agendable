@@ -22,12 +22,14 @@ async def _init_db() -> None:
 
 
 async def _claim_reminder_attempt(*, reminder: Reminder, now: datetime) -> bool:
+    settings = get_settings()
     async with db.SessionMaker() as claim_session:
         reminder_repo = ReminderRepository(claim_session)
         was_claimed = await reminder_repo.try_claim_attempt(
             reminder_id=reminder.id,
             expected_attempt_count=reminder.attempt_count,
             now=now,
+            claim_lease_seconds=settings.reminder_claim_lease_seconds,
         )
         if not was_claimed:
             return False

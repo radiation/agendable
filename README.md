@@ -87,6 +87,7 @@ Reminder scheduling defaults:
 - `AGENDABLE_REMINDER_WORKER_POLL_SECONDS` (default `60`)
 - `AGENDABLE_REMINDER_RETRY_MAX_ATTEMPTS` (default `3`)
 - `AGENDABLE_REMINDER_RETRY_BACKOFF_SECONDS` (default `60`, exponential backoff base)
+- `AGENDABLE_REMINDER_CLAIM_LEASE_SECONDS` (default `30`, temporary lease to prevent duplicate concurrent claims)
 
 Per-series override:
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import cast
 
 from sqlalchemy import or_, select, update
@@ -47,6 +47,7 @@ class ReminderRepository(BaseRepository[Reminder]):
         reminder_id: uuid.UUID,
         expected_attempt_count: int,
         now: datetime,
+        claim_lease_seconds: int,
     ) -> bool:
         claim_result = await self.session.execute(
             update(Reminder)
@@ -62,6 +63,7 @@ class ReminderRepository(BaseRepository[Reminder]):
             .values(
                 attempt_count=Reminder.attempt_count + 1,
                 last_attempted_at=now,
+                next_attempt_at=now + timedelta(seconds=claim_lease_seconds),
             )
             .execution_options(synchronize_session=False)
         )

@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     reminder_worker_poll_seconds: int = 60
     reminder_retry_max_attempts: int = Field(default=3, ge=1)
     reminder_retry_backoff_seconds: int = Field(default=60, ge=1)
+    reminder_claim_lease_seconds: int = Field(default=30, ge=1)
 
     # OIDC (optional)
     oidc_client_id: str | None = None

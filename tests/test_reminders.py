@@ -19,11 +19,13 @@ from agendable.db.models import (
     Task,
     User,
 )
+from agendable.db.repos import ReminderRepository
 from agendable.reminders import (
     ReminderEmail,
     ReminderSender,
     TerminalReminderDeliveryError,
     TransientReminderDeliveryError,
+    as_utc,
 )
 
 
@@ -343,3 +345,57 @@ async def test_run_due_reminders_skips_send_when_claim_not_acquired(
         ).scalar_one()
         assert refreshed.sent_at is None
         assert refreshed.attempt_count == 0
+
+
+@pytest.mark.asyncio
+async def test_try_claim_attempt_applies_lease_and_blocks_immediate_reclaim(
+    db_session: AsyncSession,
+) -> None:
+    occurrence = await _create_occurrence(
+        db_session,
+        email="owner-lease@example.com",
+        title="Lease Meeting",
+    )
+
+    reminder = Reminder(
+        occurrence_id=occurrence.id,
+        channel=ReminderChannel.email,
+        send_at=datetime.now(UTC) - timedelta(minutes=1),
+        next_attempt_at=datetime.now(UTC) - timedelta(minutes=1),
+        sent_at=None,
+    )
+    db_session.add(reminder)
+    await db_session.commit()
+
+    async with db.SessionMaker() as claim_session:
+        repo = ReminderRepository(claim_session)
+        claim_now = datetime.now(UTC)
+        first_claim = await repo.try_claim_attempt(
+            reminder_id=reminder.id,
+            expected_attempt_count=0,
+            now=claim_now,
+            claim_lease_seconds=45,
+        )
+        await claim_session.commit()
+
+    assert first_claim is True
+
+    async with db.SessionMaker() as verify_session:
+        refreshed = (
+            await verify_session.execute(select(Reminder).where(Reminder.id == reminder.id))
+        ).scalar_one()
+        assert refreshed.attempt_count == 1
+        assert refreshed.next_attempt_at is not None
+        assert as_utc(refreshed.next_attempt_at) > claim_now
+
+    async with db.SessionMaker() as second_claim_session:
+        repo = ReminderRepository(second_claim_session)
+        second_claim = await repo.try_claim_attempt(
+            reminder_id=reminder.id,
+            expected_attempt_count=1,
+            now=claim_now,
+            claim_lease_seconds=45,
+        )
+        await second_claim_session.commit()
+
+    assert second_claim is False

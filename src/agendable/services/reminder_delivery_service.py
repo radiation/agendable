@@ -6,9 +6,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-import agendable.db as db
 from agendable.db.models import Reminder, ReminderChannel, ReminderDeliveryStatus
 from agendable.db.repos import ReminderRepository
+from agendable.db.repos.reminders import claim_reminder_attempt as claim_reminder_attempt_in_repo
 from agendable.logging_config import log_with_fields
 from agendable.reminders import ReminderDeliveryError, ReminderEmail, ReminderSender, as_utc
 from agendable.settings import Settings, get_settings
@@ -24,29 +24,12 @@ class ReminderRunStats:
     failure_reason_counts: Counter[str] = field(default_factory=Counter)
 
 
+type ClaimAttemptFn = Callable[..., Awaitable[bool]]
+
+
 def _is_reminder_due(reminder: Reminder, now: datetime) -> bool:
     next_attempt_at = reminder.next_attempt_at if reminder.next_attempt_at else reminder.send_at
     return as_utc(next_attempt_at) <= now
-
-
-async def claim_reminder_attempt(*, reminder: Reminder, now: datetime) -> bool:
-    settings = get_settings()
-    async with db.SessionMaker() as claim_session:
-        reminder_repo = ReminderRepository(claim_session)
-        was_claimed = await reminder_repo.try_claim_attempt(
-            reminder_id=reminder.id,
-            expected_attempt_count=reminder.attempt_count,
-            now=now,
-            claim_lease_seconds=settings.reminder_claim_lease_seconds,
-        )
-        if not was_claimed:
-            return False
-
-        await claim_session.commit()
-
-    reminder.attempt_count += 1
-    reminder.last_attempted_at = now
-    return True
 
 
 def _build_reminder_email(reminder: Reminder) -> ReminderEmail:
@@ -84,22 +67,28 @@ def _log_run_summary(
         )
 
 
-async def run_due_reminders(
-    *,
-    sender: ReminderSender,
-    logger: logging.Logger,
-    settings: Settings | None = None,
-    claim_attempt: Callable[..., Awaitable[bool]] | None = None,
-) -> None:
-    selected_settings = settings if settings is not None else get_settings()
-    started_at = datetime.now(UTC)
-    now = started_at
-    stats = ReminderRunStats()
-    selected_claim_attempt = claim_attempt if claim_attempt is not None else claim_reminder_attempt
+class ReminderDeliveryService:
+    def __init__(
+        self,
+        *,
+        reminder_repo: ReminderRepository,
+        sender: ReminderSender,
+        logger: logging.Logger,
+        settings: Settings | None = None,
+        claim_attempt: ClaimAttemptFn | None = None,
+    ) -> None:
+        self.reminder_repo = reminder_repo
+        self.sender = sender
+        self.logger = logger
+        self.settings = settings if settings is not None else get_settings()
+        self.claim_attempt = claim_attempt
 
-    async with db.SessionMaker() as session:
-        reminder_repo = ReminderRepository(session)
-        reminders = await reminder_repo.list_pending_for_delivery()
+    async def run_due_reminders(self) -> None:
+        started_at = datetime.now(UTC)
+        now = started_at
+        stats = ReminderRunStats()
+
+        reminders = await self.reminder_repo.list_pending_for_delivery()
         for reminder in reminders:
             if not _is_reminder_due(reminder, now):
                 continue
@@ -110,29 +99,29 @@ async def run_due_reminders(
                 stats.skipped += 1
                 continue
 
-            was_claimed = await selected_claim_attempt(reminder=reminder, now=now)
+            was_claimed = await self._claim_attempt(reminder=reminder, now=now)
             if not was_claimed:
                 continue
 
             stats.attempted += 1
 
             try:
-                await sender.send_email_reminder(_build_reminder_email(reminder))
+                await self.sender.send_email_reminder(_build_reminder_email(reminder))
             except ReminderDeliveryError as exc:
                 reminder.failure_reason_code = exc.reason_code
                 stats.failure_reason_counts[exc.reason_code] += 1
                 if (
                     exc.is_transient
-                    and reminder.attempt_count < selected_settings.reminder_retry_max_attempts
+                    and reminder.attempt_count < self.settings.reminder_retry_max_attempts
                 ):
-                    backoff_seconds = selected_settings.reminder_retry_backoff_seconds * (
+                    backoff_seconds = self.settings.reminder_retry_backoff_seconds * (
                         2 ** (reminder.attempt_count - 1)
                     )
                     reminder.next_attempt_at = now + timedelta(seconds=backoff_seconds)
                     reminder.delivery_status = ReminderDeliveryStatus.retry_scheduled
                     stats.retried += 1
                     log_with_fields(
-                        logger,
+                        self.logger,
                         logging.WARNING,
                         "reminder delivery transient failure",
                         reminder_id=reminder.id,
@@ -145,7 +134,7 @@ async def run_due_reminders(
                     reminder.delivery_status = ReminderDeliveryStatus.failed_terminal
                     stats.failed += 1
                     log_with_fields(
-                        logger,
+                        self.logger,
                         logging.ERROR,
                         "reminder delivery terminal failure",
                         reminder_id=reminder.id,
@@ -160,6 +149,33 @@ async def run_due_reminders(
             reminder.failure_reason_code = None
             stats.sent += 1
 
-        await session.commit()
+        await self.reminder_repo.commit()
+        _log_run_summary(logger=self.logger, started_at=started_at, stats=stats)
 
-    _log_run_summary(logger=logger, started_at=started_at, stats=stats)
+    async def _claim_attempt(self, *, reminder: Reminder, now: datetime) -> bool:
+        if self.claim_attempt is not None:
+            return await self.claim_attempt(reminder=reminder, now=now)
+
+        return await claim_reminder_attempt_in_repo(
+            reminder=reminder,
+            now=now,
+            claim_lease_seconds=self.settings.reminder_claim_lease_seconds,
+        )
+
+
+async def run_due_reminders(
+    *,
+    reminder_repo: ReminderRepository,
+    sender: ReminderSender,
+    logger: logging.Logger,
+    settings: Settings | None = None,
+    claim_attempt: ClaimAttemptFn | None = None,
+) -> None:
+    service = ReminderDeliveryService(
+        reminder_repo=reminder_repo,
+        sender=sender,
+        logger=logger,
+        settings=settings,
+        claim_attempt=claim_attempt,
+    )
+    await service.run_due_reminders()

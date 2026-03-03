@@ -10,8 +10,12 @@ from starlette.responses import Response
 
 from agendable.auth import require_user, verify_password
 from agendable.db import get_session
-from agendable.db.models import User
-from agendable.db.repos import ExternalIdentityRepository
+from agendable.db.models import CalendarProvider, User
+from agendable.db.repos import (
+    ExternalCalendarConnectionRepository,
+    ExternalCalendarEventMirrorRepository,
+    ExternalIdentityRepository,
+)
 from agendable.logging_config import log_with_fields
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
@@ -24,6 +28,8 @@ from agendable.security.audit_constants import (
     OIDC_REASON_PROVIDER_DISABLED,
     OIDC_REASON_RATE_LIMITED,
 )
+from agendable.services.google_calendar_client import GoogleCalendarHttpClient
+from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.settings import get_settings
 from agendable.sso.oidc.flow import (
     build_authorize_params,
@@ -44,6 +50,14 @@ from agendable.web.routes.auth.rate_limits import is_identity_link_start_rate_li
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
+
+
+def build_google_calendar_client() -> GoogleCalendarHttpClient:
+    settings = get_settings()
+    return GoogleCalendarHttpClient(
+        api_base_url=settings.google_calendar_api_base_url,
+        initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
+    )
 
 
 @router.get("/auth/oidc/start", response_class=RedirectResponse)
@@ -137,6 +151,64 @@ async def oidc_callback(
         token_capture=token_capture,
         settings=settings,
     )
+
+
+@router.post(
+    "/profile/calendar/google/sync",
+    response_class=RedirectResponse,
+)
+async def sync_google_calendar_now(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_user),
+) -> Response:
+    settings = get_settings()
+    if not settings.google_calendar_sync_enabled:
+        raise HTTPException(status_code=404)
+
+    user = await auth_routes.get_user_or_404(session, current_user.id)
+    connection_repo = ExternalCalendarConnectionRepository(session)
+    connection = await connection_repo.get_for_user_provider_calendar(
+        user_id=user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+    )
+    if connection is None:
+        return await auth_routes.render_profile_template(
+            request,
+            session=session,
+            user=user,
+            identity_error="No Google Calendar connection found yet.",
+            status_code=400,
+        )
+
+    sync_service = GoogleCalendarSyncService(
+        connection_repo=connection_repo,
+        event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
+        calendar_client=build_google_calendar_client(),
+    )
+    try:
+        synced_event_count = await sync_service.sync_connection(connection)
+    except Exception:
+        logger.exception("google calendar sync failed for user_id=%s", user.id)
+        return await auth_routes.render_profile_template(
+            request,
+            session=session,
+            user=user,
+            identity_error="Google Calendar sync failed. Try again.",
+            status_code=502,
+        )
+
+    if settings.oidc_debug_logging:
+        log_with_fields(
+            logger,
+            logging.INFO,
+            "google calendar manual sync complete",
+            user_id=user.id,
+            synced_event_count=synced_event_count,
+        )
+
+    return RedirectResponse(url="/profile", status_code=303)
 
 
 @router.post(

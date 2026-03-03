@@ -2,6 +2,7 @@ from agendable.services.calendar_connection_service import (
     should_capture_google_calendar_token,
     upsert_google_primary_calendar_connection,
 )
+from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
@@ -23,6 +24,7 @@ __all__ = [
     "ExternalCalendarEvent",
     "ExternalCalendarSyncBatch",
     "GoogleCalendarClient",
+    "GoogleCalendarHttpClient",
     "GoogleCalendarSyncService",
     "OidcLinkResolution",
     "OidcLoginResolution",

@@ -194,8 +194,16 @@ Calendar import/sync foundation is now behind feature flags and DB schema only; 
 
 - `AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED='false'`
 - `AGENDABLE_GOOGLE_CALENDAR_OIDC_ADDITIONAL_SCOPE='https://www.googleapis.com/auth/calendar.readonly'`
+- `AGENDABLE_GOOGLE_CALENDAR_API_BASE_URL='https://www.googleapis.com/calendar/v3'`
+- `AGENDABLE_GOOGLE_CALENDAR_INITIAL_SYNC_DAYS_BACK='90'`
 
 When `AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED='true'`, Agendable appends the configured additional scope to OIDC authorization requests so users can grant calendar read access during login/link flows.
+
+With the feature enabled, users can manually trigger a sync from Profile via:
+
+- `POST /profile/calendar/google/sync`
+
+This currently syncs the user's Google `primary` calendar into external mirror rows.
 
 #### Managed OIDC testing (Auth0 / Okta / any OIDC provider)
 

@@ -11,8 +11,12 @@ from starlette.responses import Response
 
 from agendable.auth import hash_password, require_user, verify_password
 from agendable.db import get_session
-from agendable.db.models import User, UserRole
-from agendable.db.repos import ExternalIdentityRepository, UserRepository
+from agendable.db.models import CalendarProvider, User, UserRole
+from agendable.db.repos import (
+    ExternalCalendarConnectionRepository,
+    ExternalIdentityRepository,
+    UserRepository,
+)
 from agendable.security.audit import audit_auth_denied, audit_auth_success
 from agendable.security.audit_constants import (
     AUTH_EVENT_LOGOUT,
@@ -147,8 +151,15 @@ async def render_profile_template(
     identity_error: str | None,
     status_code: int = 200,
 ) -> Response:
+    settings = get_settings()
     ext_repo = ExternalIdentityRepository(session)
+    calendar_connection_repo = ExternalCalendarConnectionRepository(session)
     identities = await ext_repo.list_by_user_id(user.id)
+    google_calendar_connection = await calendar_connection_repo.get_for_user_provider_calendar(
+        user_id=user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+    )
     return templates.TemplateResponse(
         request,
         "profile.html",
@@ -158,6 +169,8 @@ async def render_profile_template(
             "identities": identities,
             "identity_error": identity_error,
             "oidc_enabled": _auth_oidc_enabled(),
+            "google_calendar_sync_enabled": settings.google_calendar_sync_enabled,
+            "google_calendar_connected": google_calendar_connection is not None,
         },
         status_code=status_code,
     )

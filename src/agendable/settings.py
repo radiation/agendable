@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     # Google Calendar import/sync rollout (phase 1 groundwork)
     google_calendar_sync_enabled: bool = False
     google_calendar_oidc_additional_scope: str = "https://www.googleapis.com/auth/calendar.readonly"
+    google_calendar_api_base_url: str = "https://www.googleapis.com/calendar/v3"
+    google_calendar_initial_sync_days_back: int = Field(default=90, ge=1)
 
 
 def get_settings() -> Settings:

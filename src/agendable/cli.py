@@ -8,6 +8,7 @@ from datetime import datetime
 import agendable.db as db
 from agendable.db.models import Base, Reminder
 from agendable.db.repos import ReminderRepository
+from agendable.db.repos.reminders import claim_reminder_attempt as claim_reminder_attempt_in_repo
 from agendable.logging_config import configure_logging
 from agendable.reminders import ReminderSender, build_reminder_sender
 from agendable.services.reminder_delivery_service import run_due_reminders
@@ -23,32 +24,25 @@ async def _init_db() -> None:
 
 async def _claim_reminder_attempt(*, reminder: Reminder, now: datetime) -> bool:
     settings = get_settings()
-    async with db.SessionMaker() as claim_session:
-        reminder_repo = ReminderRepository(claim_session)
-        was_claimed = await reminder_repo.try_claim_attempt(
-            reminder_id=reminder.id,
-            expected_attempt_count=reminder.attempt_count,
-            now=now,
-            claim_lease_seconds=settings.reminder_claim_lease_seconds,
-        )
-        if not was_claimed:
-            return False
-        await claim_session.commit()
-
-    reminder.attempt_count += 1
-    reminder.last_attempted_at = now
-    return True
+    return await claim_reminder_attempt_in_repo(
+        reminder=reminder,
+        now=now,
+        claim_lease_seconds=settings.reminder_claim_lease_seconds,
+    )
 
 
 async def _run_due_reminders(sender: ReminderSender | None = None) -> None:
     settings = get_settings()
     selected_sender = sender if sender is not None else build_reminder_sender(settings)
-    await run_due_reminders(
-        sender=selected_sender,
-        logger=logger,
-        settings=settings,
-        claim_attempt=_claim_reminder_attempt,
-    )
+    async with db.SessionMaker() as session:
+        reminder_repo = ReminderRepository(session)
+        await run_due_reminders(
+            reminder_repo=reminder_repo,
+            sender=selected_sender,
+            logger=logger,
+            settings=settings,
+            claim_attempt=_claim_reminder_attempt,
+        )
 
 
 async def _run_reminders_worker(poll_seconds: int) -> None:

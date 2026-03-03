@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.auth import hash_password
-from agendable.db.models import ExternalIdentity, User, UserRole
+from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User, UserRole
 from agendable.web.routes import auth as auth_routes
 from tests.auth.account_linking_test_helpers import (
     FakeOidcLinkClient,
@@ -255,3 +255,58 @@ async def test_profile_link_start_rate_limit_blocks_repeated_attempts(
     assert first.status_code == 303
     assert second.status_code == 429
     assert "Too many link attempts" in second.text
+
+
+@pytest.mark.asyncio
+async def test_profile_link_flow_captures_google_calendar_connection_when_scope_granted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enable_oidc_env(monkeypatch)
+    monkeypatch.setenv("AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED", "true")
+
+    await signup_and_login(
+        client,
+        first_name="Link",
+        last_name="Calendar",
+        email="link-calendar@example.com",
+    )
+
+    fake_client = FakeOidcLinkClient(
+        {
+            "sub": "sub-link-calendar",
+            "email": "link-calendar@example.com",
+            "email_verified": True,
+        },
+        token_payload={
+            "access_token": "link-calendar-access-token",
+            "refresh_token": "link-calendar-refresh-token",
+            "scope": "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+            "id_token": "id-token",
+        },
+    )
+    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+
+    start = await client.post(
+        "/profile/identities/link/start",
+        data={"password": "pw123456"},
+        follow_redirects=False,
+    )
+    assert start.status_code == 303
+
+    callback = await client.get("/auth/oidc/callback", follow_redirects=False)
+    assert callback.status_code == 303
+
+    user = await get_user_by_email(db_session, "link-calendar@example.com")
+    connection = (
+        await db_session.execute(
+            select(ExternalCalendarConnection).where(
+                ExternalCalendarConnection.user_id == user.id,
+                ExternalCalendarConnection.external_calendar_id == "primary",
+            )
+        )
+    ).scalar_one()
+
+    assert connection.access_token == "link-calendar-access-token"
+    assert connection.refresh_token == "link-calendar-refresh-token"

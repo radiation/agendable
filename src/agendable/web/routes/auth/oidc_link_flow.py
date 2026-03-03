@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.db.models import ExternalIdentity, User
-from agendable.db.repos import ExternalIdentityRepository
+from agendable.db.repos import ExternalCalendarConnectionRepository, ExternalIdentityRepository
 from agendable.logging_config import log_with_fields
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
@@ -17,8 +17,13 @@ from agendable.security.audit_constants import (
     OIDC_REASON_ALREADY_LINKED_OTHER_USER,
     OIDC_REASON_EMAIL_MISMATCH,
 )
+from agendable.services.calendar_connection_service import (
+    should_capture_google_calendar_token,
+    upsert_google_primary_calendar_connection,
+)
 from agendable.services.oidc_service import resolve_oidc_link_resolution
-from agendable.sso.oidc.flow import clear_oidc_link_user_id
+from agendable.settings import Settings
+from agendable.sso.oidc.flow import OidcTokenCapture, clear_oidc_link_user_id
 from agendable.web.routes import auth as auth_routes
 
 logger = logging.getLogger("uvicorn.error")
@@ -75,6 +80,8 @@ async def handle_link_callback(
     sub: str,
     email: str,
     debug_oidc: bool,
+    token_capture: OidcTokenCapture,
+    settings: Settings,
 ) -> Response:
     ext_repo = ExternalIdentityRepository(session)
 
@@ -154,6 +161,14 @@ async def handle_link_callback(
         ext = ExternalIdentity(user_id=link_user.id, provider="oidc", subject=sub, email=email)
         session.add(ext)
         await session.commit()
+
+    if should_capture_google_calendar_token(settings=settings, token_capture=token_capture):
+        connection_repo = ExternalCalendarConnectionRepository(session)
+        await upsert_google_primary_calendar_connection(
+            connection_repo=connection_repo,
+            user=link_user,
+            token_capture=token_capture,
+        )
 
     clear_oidc_link_user_id(request)
     request.session["user_id"] = str(link_user.id)

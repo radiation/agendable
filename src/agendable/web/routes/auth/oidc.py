@@ -93,7 +93,7 @@ async def oidc_callback(
     if isinstance(identity_or_response, Response):
         return identity_or_response
 
-    sub, email, userinfo = identity_or_response
+    sub, email, userinfo, token_capture = identity_or_response
 
     domain_error = domain_block_response(
         request,
@@ -122,6 +122,8 @@ async def oidc_callback(
             sub=sub,
             email=email,
             debug_oidc=debug_oidc,
+            token_capture=token_capture,
+            settings=settings,
         )
 
     return await handle_login_callback(
@@ -132,6 +134,8 @@ async def oidc_callback(
         userinfo=userinfo,
         debug_oidc=debug_oidc,
         link_user_id=link_user_id,
+        token_capture=token_capture,
+        settings=settings,
     )
 
 

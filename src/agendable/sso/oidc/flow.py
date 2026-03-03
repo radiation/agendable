@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Request
 
@@ -16,6 +17,14 @@ class OidcIdentityClaims:
     sub: str
     email: str
     email_verified: bool
+
+
+@dataclass(frozen=True)
+class OidcTokenCapture:
+    access_token: str | None
+    refresh_token: str | None
+    scope: str | None
+    expires_at: datetime | None
 
 
 def get_oidc_link_user_id(request: Request) -> uuid.UUID | None:
@@ -97,4 +106,33 @@ def parse_identity_claims(userinfo: Mapping[str, object]) -> OidcIdentityClaims:
         sub=str(userinfo.get("sub", "")),
         email=str(userinfo.get("email", "")).strip().lower(),
         email_verified=_claim_is_truthy(userinfo.get("email_verified")),
+    )
+
+
+def _as_str_or_none(value: object) -> str | None:
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _as_expiry_datetime(token: Mapping[str, object]) -> datetime | None:
+    expires_at_raw = token.get("expires_at")
+    if isinstance(expires_at_raw, int | float):
+        return datetime.fromtimestamp(expires_at_raw, tz=UTC)
+
+    expires_in_raw = token.get("expires_in")
+    if isinstance(expires_in_raw, int | float):
+        return datetime.now(UTC).replace(microsecond=0) + timedelta(seconds=float(expires_in_raw))
+
+    return None
+
+
+def parse_token_capture(token: Mapping[str, object]) -> OidcTokenCapture:
+    return OidcTokenCapture(
+        access_token=_as_str_or_none(token.get("access_token")),
+        refresh_token=_as_str_or_none(token.get("refresh_token")),
+        scope=_as_str_or_none(token.get("scope")),
+        expires_at=_as_expiry_datetime(token),
     )

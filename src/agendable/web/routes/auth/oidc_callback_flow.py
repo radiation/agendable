@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.db.models import ExternalIdentity, User
+from agendable.db.repos import ExternalCalendarConnectionRepository
 from agendable.logging_config import log_with_fields
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
@@ -20,6 +21,10 @@ from agendable.security.audit_constants import (
     OIDC_REASON_MISSING_REQUIRED_CLAIMS,
     OIDC_REASON_OAUTH_ERROR,
     OIDC_REASON_RATE_LIMITED,
+)
+from agendable.services.calendar_connection_service import (
+    should_capture_google_calendar_token,
+    upsert_google_primary_calendar_connection,
 )
 from agendable.services.oidc_service import (
     OidcLoginResolution,
@@ -31,7 +36,9 @@ from agendable.settings import Settings
 from agendable.sso.oidc.client import OidcClient
 from agendable.sso.oidc.flow import (
     OidcIdentityClaims,
+    OidcTokenCapture,
     parse_identity_claims,
+    parse_token_capture,
     parse_userinfo_from_token,
 )
 from agendable.web.routes import auth as auth_routes
@@ -64,6 +71,8 @@ async def handle_login_callback(
     userinfo: Mapping[str, object],
     debug_oidc: bool,
     link_user_id: uuid.UUID | None,
+    token_capture: OidcTokenCapture,
+    settings: Settings,
 ) -> Response:
     login_resolution = await resolve_oidc_login_resolution(
         session,
@@ -91,6 +100,14 @@ async def handle_login_callback(
         email=email,
         debug_oidc=debug_oidc,
     )
+
+    if should_capture_google_calendar_token(settings=settings, token_capture=token_capture):
+        connection_repo = ExternalCalendarConnectionRepository(session)
+        await upsert_google_primary_calendar_connection(
+            connection_repo=connection_repo,
+            user=user,
+            token_capture=token_capture,
+        )
 
     if debug_oidc:
         log_with_fields(
@@ -208,8 +225,9 @@ async def _parse_and_validate_claims_or_error(
     debug_oidc: bool,
     link_user_id: uuid.UUID | None,
     session: AsyncSession,
-) -> tuple[str, str, Mapping[str, object]] | Response:
+) -> tuple[str, str, Mapping[str, object], OidcTokenCapture] | Response:
     userinfo = await parse_userinfo_from_token(oidc_client, request, token)
+    token_capture = parse_token_capture(token)
     claims: OidcIdentityClaims = parse_identity_claims(userinfo)
     sub = claims.sub
     email = claims.email
@@ -227,7 +245,7 @@ async def _parse_and_validate_claims_or_error(
         )
 
     if sub and email and email_verified:
-        return sub, email, userinfo
+        return sub, email, userinfo, token_capture
 
     if debug_oidc:
         logger.info(
@@ -260,7 +278,7 @@ async def extract_oidc_identity_or_response(
     debug_oidc: bool,
     link_user_id: uuid.UUID | None,
     session: AsyncSession,
-) -> tuple[str, str, Mapping[str, object]] | Response:
+) -> tuple[str, str, Mapping[str, object], OidcTokenCapture] | Response:
     token_or_response = await _exchange_token_or_error(
         request,
         oidc_client=oidc_client,

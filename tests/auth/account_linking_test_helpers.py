@@ -17,6 +17,7 @@ _DEFAULT_TEST_PASSWORD = os.environ.get("AGENDABLE_TEST_DEFAULT_PASSWORD", "pw12
 @dataclass
 class FakeOidcLinkClient:
     userinfo_payload: dict[str, object]
+    token_payload: dict[str, object] | None = None
 
     async def authorize_redirect(
         self,
@@ -26,7 +27,9 @@ class FakeOidcLinkClient:
     ) -> RedirectResponse:
         return RedirectResponse(url="https://idp.example.test/authorize", status_code=302)
 
-    async def authorize_access_token(self, request: object) -> dict[str, str]:
+    async def authorize_access_token(self, request: object) -> dict[str, object]:
+        if self.token_payload is not None:
+            return self.token_payload
         return {"access_token": "test-token", "id_token": "id-token"}
 
     async def parse_id_token(self, request: object, token: object) -> dict[str, object]:

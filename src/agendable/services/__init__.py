@@ -1,3 +1,9 @@
+from agendable.services.google_calendar_sync_service import (
+    ExternalCalendarEvent,
+    ExternalCalendarSyncBatch,
+    GoogleCalendarClient,
+    GoogleCalendarSyncService,
+)
 from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
 from agendable.services.oidc_service import (
     OidcLinkResolution,
@@ -10,6 +16,10 @@ from agendable.services.reminder_delivery_service import run_due_reminders
 from agendable.services.series_service import create_series_with_occurrences
 
 __all__ = [
+    "ExternalCalendarEvent",
+    "ExternalCalendarSyncBatch",
+    "GoogleCalendarClient",
+    "GoogleCalendarSyncService",
     "OidcLinkResolution",
     "OidcLoginResolution",
     "complete_occurrence_and_roll_forward",

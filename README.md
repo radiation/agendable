@@ -175,6 +175,7 @@ To enable SSO, set:
 - `AGENDABLE_OIDC_CLIENT_ID='...'`
 - `AGENDABLE_OIDC_CLIENT_SECRET='...'`
 - `AGENDABLE_OIDC_METADATA_URL='https://<your-provider>/.well-known/openid-configuration'`
+- `AGENDABLE_OIDC_SCOPE='openid email profile'` (optional override)
 
 Optional login-prompt behavior:
 
@@ -186,6 +187,15 @@ Optional login-prompt behavior:
 Optional restriction:
 
 - `AGENDABLE_ALLOWED_EMAIL_DOMAIN='example.com'` (only allows `@example.com` users)
+
+#### Google Calendar sync groundwork (phase 1)
+
+Calendar import/sync foundation is now behind feature flags and DB schema only; meeting/task auto-linking is not enabled yet.
+
+- `AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED='false'`
+- `AGENDABLE_GOOGLE_CALENDAR_OIDC_ADDITIONAL_SCOPE='https://www.googleapis.com/auth/calendar.readonly'`
+
+When `AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED='true'`, Agendable appends the configured additional scope to OIDC authorization requests so users can grant calendar read access during login/link flows.
 
 #### Managed OIDC testing (Auth0 / Okta / any OIDC provider)
 

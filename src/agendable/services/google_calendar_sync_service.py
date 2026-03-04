@@ -46,6 +46,15 @@ class GoogleCalendarClient(Protocol):
     ) -> ExternalCalendarSyncBatch: ...
 
 
+class CalendarEventMapper(Protocol):
+    async def map_mirrors(
+        self,
+        *,
+        connection: ExternalCalendarConnection,
+        mirrors: list[ExternalCalendarEventMirror],
+    ) -> int: ...
+
+
 class GoogleCalendarSyncService:
     def __init__(
         self,
@@ -53,24 +62,38 @@ class GoogleCalendarSyncService:
         connection_repo: ExternalCalendarConnectionRepository,
         event_mirror_repo: ExternalCalendarEventMirrorRepository,
         calendar_client: GoogleCalendarClient,
+        event_mapper: CalendarEventMapper | None = None,
     ) -> None:
         self.connection_repo = connection_repo
         self.event_mirror_repo = event_mirror_repo
         self.calendar_client = calendar_client
+        self.event_mapper = event_mapper
 
     async def sync_connection(self, connection: ExternalCalendarConnection) -> int:
         if not connection.access_token:
             raise ValueError("Calendar connection is missing an access token")
 
+        sync_token_for_request = connection.sync_token
+        if sync_token_for_request is not None:
+            has_mirrored_events = await self.event_mirror_repo.has_any_for_connection(connection.id)
+            if not has_mirrored_events:
+                sync_token_for_request = None
+
         batch = await self.calendar_client.list_events(
             access_token=connection.access_token,
             refresh_token=connection.refresh_token,
             calendar_id=connection.external_calendar_id,
-            sync_token=connection.sync_token,
+            sync_token=sync_token_for_request,
         )
 
+        touched_mirrors: list[ExternalCalendarEventMirror] = []
         for event in batch.events:
-            await self._upsert_mirror_event(connection=connection, event=event)
+            touched_mirrors.append(
+                await self._upsert_mirror_event(connection=connection, event=event)
+            )
+
+        if self.event_mapper is not None and touched_mirrors:
+            await self.event_mapper.map_mirrors(connection=connection, mirrors=touched_mirrors)
 
         connection.sync_token = batch.next_sync_token
         connection.last_synced_at = datetime.now(UTC)

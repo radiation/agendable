@@ -32,3 +32,11 @@ class ExternalCalendarEventMirrorRepository(BaseRepository[ExternalCalendarEvent
         mirror.last_seen_at = datetime.now(UTC)
         await self.session.flush()
         return mirror
+
+    async def has_any_for_connection(self, connection_id: uuid.UUID) -> bool:
+        result = await self.session.execute(
+            select(ExternalCalendarEventMirror.id)
+            .where(ExternalCalendarEventMirror.connection_id == connection_id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None

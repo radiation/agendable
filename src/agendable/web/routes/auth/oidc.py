@@ -28,6 +28,7 @@ from agendable.security.audit_constants import (
     OIDC_REASON_PROVIDER_DISABLED,
     OIDC_REASON_RATE_LIMITED,
 )
+from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.settings import get_settings
@@ -186,6 +187,7 @@ async def sync_google_calendar_now(
         connection_repo=connection_repo,
         event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
         calendar_client=build_google_calendar_client(),
+        event_mapper=CalendarEventMappingService(session=session),
     )
     try:
         synced_event_count = await sync_service.sync_connection(connection)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "0017"
@@ -18,14 +19,35 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
     calendar_provider_enum = sa.Enum("google", name="calendar_provider")
-    calendar_provider_enum.create(op.get_bind(), checkfirst=True)
+    provider_column_type: sa.TypeEngine[object]
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            """
+            DO $$
+            BEGIN
+                CREATE TYPE calendar_provider AS ENUM ('google');
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END
+            $$;
+            """
+        )
+        provider_column_type = postgresql.ENUM(
+            "google",
+            name="calendar_provider",
+            create_type=False,
+        )
+    else:
+        calendar_provider_enum.create(bind, checkfirst=True)
+        provider_column_type = calendar_provider_enum
 
     op.create_table(
         "external_calendar_connection",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("user_id", sa.Uuid(), nullable=False),
-        sa.Column("provider", calendar_provider_enum, nullable=False, server_default="google"),
+        sa.Column("provider", provider_column_type, nullable=False, server_default="google"),
         sa.Column("external_calendar_id", sa.String(length=255), nullable=False),
         sa.Column("calendar_display_name", sa.String(length=300), nullable=True),
         sa.Column("scope", sa.Text(), nullable=True),
@@ -115,5 +137,9 @@ def downgrade() -> None:
     )
     op.drop_table("external_calendar_connection")
 
-    calendar_provider_enum = sa.Enum(name="calendar_provider")
-    calendar_provider_enum.drop(op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("DROP TYPE IF EXISTS calendar_provider")
+    else:
+        calendar_provider_enum = sa.Enum(name="calendar_provider")
+        calendar_provider_enum.drop(bind, checkfirst=True)

@@ -10,8 +10,11 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
-from agendable.db.models import ExternalIdentity, User
-from agendable.db.repos import ExternalCalendarConnectionRepository
+from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User
+from agendable.db.repos import (
+    ExternalCalendarConnectionRepository,
+    ExternalCalendarEventMirrorRepository,
+)
 from agendable.logging_config import log_with_fields
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
@@ -26,6 +29,9 @@ from agendable.services.calendar_connection_service import (
     should_capture_google_calendar_token,
     upsert_google_primary_calendar_connection,
 )
+from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
+from agendable.services.google_calendar_client import GoogleCalendarHttpClient
+from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.oidc_service import (
     OidcLoginResolution,
     is_email_allowed_for_domain,
@@ -60,6 +66,40 @@ def auth_oidc_oauth_client() -> OidcClient:
 
 def _login_redirect() -> RedirectResponse:
     return RedirectResponse(url="/login", status_code=303)
+
+
+def build_google_calendar_sync_service(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+) -> GoogleCalendarSyncService:
+    return GoogleCalendarSyncService(
+        connection_repo=ExternalCalendarConnectionRepository(session),
+        event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
+        calendar_client=GoogleCalendarHttpClient(
+            api_base_url=settings.google_calendar_api_base_url,
+            initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
+        ),
+        event_mapper=CalendarEventMappingService(session=session),
+    )
+
+
+async def _maybe_auto_sync_new_connection(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    connection: ExternalCalendarConnection,
+    debug_oidc: bool,
+) -> None:
+    if connection.last_synced_at is not None:
+        return
+
+    sync_service = build_google_calendar_sync_service(session=session, settings=settings)
+    try:
+        await sync_service.sync_connection(connection)
+    except Exception:
+        if debug_oidc:
+            logger.exception("oidc callback auto-sync failed")
 
 
 async def handle_login_callback(
@@ -103,10 +143,16 @@ async def handle_login_callback(
 
     if should_capture_google_calendar_token(settings=settings, token_capture=token_capture):
         connection_repo = ExternalCalendarConnectionRepository(session)
-        await upsert_google_primary_calendar_connection(
+        connection = await upsert_google_primary_calendar_connection(
             connection_repo=connection_repo,
             user=user,
             token_capture=token_capture,
+        )
+        await _maybe_auto_sync_new_connection(
+            session=session,
+            settings=settings,
+            connection=connection,
+            debug_oidc=debug_oidc,
         )
 
     if debug_oidc:

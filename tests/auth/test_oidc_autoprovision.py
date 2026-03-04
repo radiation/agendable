@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User, UserRole
 from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import oidc_callback_flow
 
 
 @dataclass
@@ -28,6 +29,15 @@ class _FakeOidcClient:
 
     async def userinfo(self, token: object) -> dict[str, object]:
         return self.userinfo_payload
+
+
+class _FakeAutoSyncService:
+    def __init__(self) -> None:
+        self.synced_connection_ids: list[object] = []
+
+    async def sync_connection(self, connection: object) -> int:
+        self.synced_connection_ids.append(getattr(connection, "id", None))
+        return 0
 
 
 @pytest.mark.asyncio
@@ -320,6 +330,13 @@ async def test_oidc_callback_creates_google_calendar_connection_when_scope_grant
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    fake_auto_sync_service = _FakeAutoSyncService()
+    monkeypatch.setattr(
+        oidc_callback_flow,
+        "build_google_calendar_sync_service",
+        lambda session, settings: fake_auto_sync_service,
+    )
+
     monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_ID", "test-client")
     monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_SECRET", "test-secret")
     monkeypatch.setenv(
@@ -369,6 +386,7 @@ async def test_oidc_callback_creates_google_calendar_connection_when_scope_grant
         1_900_000_000,
         tz=UTC,
     )
+    assert fake_auto_sync_service.synced_connection_ids == [connection.id]
 
 
 @pytest.mark.asyncio

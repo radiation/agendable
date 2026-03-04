@@ -2,6 +2,7 @@ from agendable.services.calendar_connection_service import (
     should_capture_google_calendar_token,
     upsert_google_primary_calendar_connection,
 )
+from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
@@ -21,6 +22,7 @@ from agendable.services.reminder_delivery_service import run_due_reminders
 from agendable.services.series_service import create_series_with_occurrences
 
 __all__ = [
+    "CalendarEventMappingService",
     "ExternalCalendarEvent",
     "ExternalCalendarSyncBatch",
     "GoogleCalendarClient",

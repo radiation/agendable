@@ -63,6 +63,7 @@ services:
       AGENDABLE_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agendable
       AGENDABLE_AUTO_CREATE_DB: "false"
       AGENDABLE_SESSION_SECRET: dev-only-change-me
+      AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED: "true"
       AGENDABLE_SMTP_HOST: mailpit
       AGENDABLE_SMTP_PORT: "1025"
       AGENDABLE_SMTP_FROM_EMAIL: noreply@agendable.local

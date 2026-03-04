@@ -34,7 +34,10 @@ async def dashboard(
         (
             await session.execute(
                 select(MeetingOccurrence)
-                .options(selectinload(MeetingOccurrence.series))
+                .options(
+                    selectinload(MeetingOccurrence.series),
+                    selectinload(MeetingOccurrence.external_event_mirrors),
+                )
                 .join(MeetingSeries, MeetingOccurrence.series_id == MeetingSeries.id)
                 .outerjoin(
                     MeetingOccurrenceAttendee,

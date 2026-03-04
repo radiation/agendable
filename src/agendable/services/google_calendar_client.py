@@ -84,6 +84,7 @@ class GoogleCalendarHttpClient:
                 params: dict[str, str] = {
                     "showDeleted": "true",
                     "maxResults": "2500",
+                    "singleEvents": "true",
                 }
 
                 if sync_token is not None:
@@ -93,6 +94,7 @@ class GoogleCalendarHttpClient:
                     params["timeMin"] = (
                         time_min.replace(microsecond=0).isoformat().replace("+00:00", "Z")
                     )
+                    params["orderBy"] = "startTime"
 
                 if next_page_token is not None:
                     params["pageToken"] = next_page_token
@@ -104,7 +106,7 @@ class GoogleCalendarHttpClient:
                 )
                 response.raise_for_status()
 
-                payload = response.json()
+                payload: dict[str, object] = response.json()
                 if not isinstance(payload, dict):
                     raise ValueError("Google Calendar events response must be a JSON object")
 

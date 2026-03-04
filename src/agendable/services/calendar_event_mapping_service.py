@@ -1,0 +1,182 @@
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from agendable.db.models import (
+    ExternalCalendarConnection,
+    ExternalCalendarEventMirror,
+    MeetingOccurrence,
+    MeetingSeries,
+)
+
+
+class CalendarEventMappingService:
+    def __init__(self, *, session: AsyncSession) -> None:
+        self.session = session
+
+    async def map_mirrors(
+        self,
+        *,
+        connection: ExternalCalendarConnection,
+        mirrors: list[ExternalCalendarEventMirror],
+    ) -> int:
+        mapped_count = 0
+        for mirror in mirrors:
+            mapped_count += await self._map_single_mirror(connection=connection, mirror=mirror)
+        await self.session.flush()
+        return mapped_count
+
+    async def _map_single_mirror(
+        self,
+        *,
+        connection: ExternalCalendarConnection,
+        mirror: ExternalCalendarEventMirror,
+    ) -> int:
+        linked_occurrence = await self._get_linked_occurrence(mirror)
+
+        if mirror.external_status == "cancelled":
+            if linked_occurrence is None:
+                return 0
+            linked_occurrence.is_completed = True
+            return 1
+
+        if mirror.start_at is None or mirror.is_all_day:
+            return 0
+
+        normalized_start = mirror.start_at.astimezone(UTC)
+        series = await self._resolve_series(
+            connection=connection,
+            mirror=mirror,
+            linked_occurrence=linked_occurrence,
+        )
+
+        occurrence = linked_occurrence
+        if occurrence is None:
+            occurrence = await self._find_occurrence_by_schedule(
+                series_id=series.id,
+                scheduled_at=normalized_start,
+            )
+
+        if occurrence is None:
+            occurrence = MeetingOccurrence(
+                series_id=series.id,
+                scheduled_at=normalized_start,
+                notes="",
+                is_completed=False,
+            )
+            self.session.add(occurrence)
+            await self.session.flush()
+        else:
+            occurrence.scheduled_at = normalized_start
+            occurrence.is_completed = False
+
+        mirror.linked_occurrence_id = occurrence.id
+        return 1
+
+    async def _get_linked_occurrence(
+        self,
+        mirror: ExternalCalendarEventMirror,
+    ) -> MeetingOccurrence | None:
+        if mirror.linked_occurrence_id is None:
+            return None
+        return await self.session.get(MeetingOccurrence, mirror.linked_occurrence_id)
+
+    async def _resolve_series(
+        self,
+        *,
+        connection: ExternalCalendarConnection,
+        mirror: ExternalCalendarEventMirror,
+        linked_occurrence: MeetingOccurrence | None,
+    ) -> MeetingSeries:
+        if linked_occurrence is not None:
+            existing_series = await self.session.get(MeetingSeries, linked_occurrence.series_id)
+            if existing_series is not None:
+                self._apply_series_title(existing_series, mirror)
+                return existing_series
+
+        group_key = self._series_group_key(mirror)
+        existing_series = await self._find_series_for_group_key(
+            connection_id=connection.id,
+            group_key=group_key,
+            is_recurring=mirror.external_recurring_event_id is not None,
+        )
+        if existing_series is not None:
+            self._apply_series_title(existing_series, mirror)
+            return existing_series
+
+        series = MeetingSeries(
+            owner_user_id=connection.user_id,
+            title=self._series_title(mirror),
+            default_interval_days=7,
+            reminder_minutes_before=60,
+        )
+        self.session.add(series)
+        await self.session.flush()
+        return series
+
+    async def _find_series_for_group_key(
+        self,
+        *,
+        connection_id: uuid.UUID,
+        group_key: str,
+        is_recurring: bool,
+    ) -> MeetingSeries | None:
+        recurring_predicate = (
+            ExternalCalendarEventMirror.external_recurring_event_id == group_key
+            if is_recurring
+            else ExternalCalendarEventMirror.external_event_id == group_key
+        )
+        result = await self.session.execute(
+            select(MeetingSeries)
+            .join(MeetingOccurrence, MeetingOccurrence.series_id == MeetingSeries.id)
+            .join(
+                ExternalCalendarEventMirror,
+                ExternalCalendarEventMirror.linked_occurrence_id == MeetingOccurrence.id,
+            )
+            .where(
+                ExternalCalendarEventMirror.connection_id == connection_id,
+                recurring_predicate,
+            )
+            .order_by(MeetingSeries.created_at.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _find_occurrence_by_schedule(
+        self,
+        *,
+        series_id: uuid.UUID,
+        scheduled_at: datetime,
+    ) -> MeetingOccurrence | None:
+        result = await self.session.execute(
+            select(MeetingOccurrence)
+            .where(
+                MeetingOccurrence.series_id == series_id,
+                MeetingOccurrence.scheduled_at == scheduled_at,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    def _apply_series_title(
+        self, series: MeetingSeries, mirror: ExternalCalendarEventMirror
+    ) -> None:
+        summary = (mirror.summary or "").strip()
+        if summary:
+            series.title = summary
+
+    def _series_title(self, mirror: ExternalCalendarEventMirror) -> str:
+        summary = (mirror.summary or "").strip()
+        if summary:
+            return summary
+        return "Imported calendar meeting"
+
+    def _series_group_key(self, mirror: ExternalCalendarEventMirror) -> str:
+        recurring = mirror.external_recurring_event_id
+        if recurring:
+            return recurring
+        return mirror.external_event_id

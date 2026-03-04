@@ -75,6 +75,19 @@
         </form>
         {% endif %}
 
+        {% if google_calendar_sync_enabled %}
+        <form method="post" action="/profile/calendar/google/sync" class="form-grid">
+            <div>
+                <button type="submit">Sync Google Calendar now</button>
+                {% if google_calendar_connected %}
+                <small>Connected calendar: primary</small>
+                {% else %}
+                <small>Connect Google SSO with calendar scope, then sync.</small>
+                {% endif %}
+            </div>
+        </form>
+        {% endif %}
+
         <ul class="list-clean">
             {% for identity in identities %}
             <li>

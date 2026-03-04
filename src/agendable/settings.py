@@ -72,11 +72,19 @@ class Settings(BaseSettings):
     # OIDC authorize "prompt" value (e.g. "select_account", "login").
     # Set to empty string to omit prompt from authorize requests.
     oidc_auth_prompt: str | None = "select_account"
+    oidc_scope: str = "openid email profile"
     # If set, only allow users with emails in this domain (e.g. "example.com").
     allowed_email_domain: str | None = None
 
     # If set, this email is auto-promoted to admin on signup/login.
     bootstrap_admin_email: str | None = None
+
+    # Google Calendar import/sync rollout (phase 1 groundwork)
+    google_calendar_sync_enabled: bool = False
+    google_calendar_oidc_additional_scope: str = "https://www.googleapis.com/auth/calendar.readonly"
+    google_calendar_api_base_url: str = "https://www.googleapis.com/calendar/v3"
+    google_calendar_initial_sync_days_back: int = Field(default=90, ge=1)
+    google_calendar_sync_worker_poll_seconds: int = Field(default=60, ge=1)
 
 
 def get_settings() -> Settings:

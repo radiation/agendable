@@ -14,6 +14,9 @@
             {% for meeting in upcoming_meetings %}
             <li>
                 <a href="/occurrences/{{ meeting.id }}">{{ meeting.series.title }}</a>
+                {% if meeting.external_event_mirrors %}
+                <small>(Imported)</small>
+                {% endif %}
                 <small>— {{ meeting.scheduled_at|format_dt(current_user.timezone) }}</small>
             </li>
             {% else %}

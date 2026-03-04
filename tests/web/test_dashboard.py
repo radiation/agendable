@@ -9,6 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import (
+    CalendarProvider,
+    ExternalCalendarConnection,
+    ExternalCalendarEventMirror,
     MeetingOccurrence,
     MeetingOccurrenceAttendee,
     MeetingSeries,
@@ -139,3 +142,63 @@ async def test_dashboard_shows_invited_meetings_and_tasks(
     assert resp.status_code == 200
     assert str(upcoming.id) in resp.text
     assert "Invited task visibility" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_labels_imported_upcoming_meetings(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await login_user(
+        client,
+        "imported-owner@example.com",
+        "pw-imported",
+        first_name="Imported",
+        last_name="Owner",
+    )
+    owner = (
+        await db_session.execute(select(User).where(User.email == "imported-owner@example.com"))
+    ).scalar_one()
+
+    series = MeetingSeries(
+        owner_user_id=owner.id,
+        title=f"Imported Series {uuid.uuid4()}",
+        default_interval_days=7,
+    )
+    db_session.add(series)
+    await db_session.flush()
+
+    now = datetime.now(UTC)
+    occurrence = MeetingOccurrence(
+        series_id=series.id,
+        scheduled_at=now + timedelta(days=1),
+        notes="",
+    )
+    db_session.add(occurrence)
+    await db_session.flush()
+
+    connection = ExternalCalendarConnection(
+        user_id=owner.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+        access_token="token",
+    )
+    db_session.add(connection)
+    await db_session.flush()
+
+    db_session.add(
+        ExternalCalendarEventMirror(
+            connection_id=connection.id,
+            linked_occurrence_id=occurrence.id,
+            external_event_id=f"evt-{uuid.uuid4()}",
+            summary="Imported Meeting",
+            start_at=occurrence.scheduled_at,
+            end_at=occurrence.scheduled_at + timedelta(minutes=30),
+            is_all_day=False,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    assert str(occurrence.id) in resp.text
+    assert "(Imported)" in resp.text

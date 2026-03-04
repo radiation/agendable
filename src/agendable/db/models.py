@@ -40,6 +40,10 @@ class UserRole(enum.StrEnum):
     admin = "admin"
 
 
+class CalendarProvider(enum.StrEnum):
+    google = "google"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -69,6 +73,9 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     external_identities: Mapped[list[ExternalIdentity]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    calendar_connections: Mapped[list[ExternalCalendarConnection]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -154,6 +161,116 @@ class MeetingOccurrence(Base):
     )
     reminders: Mapped[list[Reminder]] = relationship(
         back_populates="occurrence", cascade="all, delete-orphan"
+    )
+    external_event_mirrors: Mapped[list[ExternalCalendarEventMirror]] = relationship(
+        back_populates="linked_occurrence"
+    )
+
+
+class ExternalCalendarConnection(Base):
+    __tablename__ = "external_calendar_connection"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "provider",
+            "external_calendar_id",
+            name="uq_external_calendar_connection_user_provider_calendar",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+
+    provider: Mapped[CalendarProvider] = mapped_column(
+        Enum(CalendarProvider, name="calendar_provider"),
+        default=CalendarProvider.google,
+    )
+    external_calendar_id: Mapped[str] = mapped_column(String(255))
+    calendar_display_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    sync_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    watch_channel_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    watch_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    watch_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_sync_error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    user: Mapped[User] = relationship(back_populates="calendar_connections")
+    event_mirrors: Mapped[list[ExternalCalendarEventMirror]] = relationship(
+        back_populates="connection", cascade="all, delete-orphan"
+    )
+
+
+class ExternalCalendarEventMirror(Base):
+    __tablename__ = "external_calendar_event_mirror"
+    __table_args__ = (
+        UniqueConstraint(
+            "connection_id",
+            "external_event_id",
+            name="uq_external_calendar_event_mirror_connection_event",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    connection_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("external_calendar_connection.id"), index=True
+    )
+    linked_occurrence_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("meeting_occurrence.id"), index=True, nullable=True
+    )
+
+    external_event_id: Mapped[str] = mapped_column(String(255))
+    external_recurring_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    etag: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    external_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    connection: Mapped[ExternalCalendarConnection] = relationship(back_populates="event_mirrors")
+    linked_occurrence: Mapped[MeetingOccurrence | None] = relationship(
+        back_populates="external_event_mirrors"
     )
 
 

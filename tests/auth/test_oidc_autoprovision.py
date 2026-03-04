@@ -2,21 +2,26 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agendable.db.models import ExternalIdentity, User, UserRole
+from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User, UserRole
 from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import oidc_callback_flow
 
 
 @dataclass
 class _FakeOidcClient:
     userinfo_payload: dict[str, object]
+    token_payload: dict[str, object] | None = None
 
-    async def authorize_access_token(self, request: object) -> dict[str, str]:
+    async def authorize_access_token(self, request: object) -> dict[str, object]:
+        if self.token_payload is not None:
+            return self.token_payload
         return {"access_token": "test-token"}
 
     async def parse_id_token(self, request: object, token: object) -> dict[str, object]:
@@ -24,6 +29,15 @@ class _FakeOidcClient:
 
     async def userinfo(self, token: object) -> dict[str, object]:
         return self.userinfo_payload
+
+
+class _FakeAutoSyncService:
+    def __init__(self) -> None:
+        self.synced_connection_ids: list[object] = []
+
+    async def sync_connection(self, connection: object) -> int:
+        self.synced_connection_ids.append(getattr(connection, "id", None))
+        return 0
 
 
 @pytest.mark.asyncio
@@ -308,3 +322,152 @@ async def test_oidc_callback_returns_404_when_provider_disabled(
 
     response = await client.get("/auth/oidc/callback", follow_redirects=False)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_oidc_callback_creates_google_calendar_connection_when_scope_granted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_auto_sync_service = _FakeAutoSyncService()
+    monkeypatch.setattr(
+        oidc_callback_flow,
+        "build_google_calendar_sync_service",
+        lambda session, settings: fake_auto_sync_service,
+    )
+
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_ID", "test-client")
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv(
+        "AGENDABLE_OIDC_METADATA_URL",
+        "https://accounts.google.com/.well-known/openid-configuration",
+    )
+    monkeypatch.setenv("AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED", "true")
+    monkeypatch.setattr(
+        auth_routes,
+        "_oidc_oauth_client",
+        lambda: _FakeOidcClient(
+            {
+                "sub": "sub-calendar-create",
+                "email": "calendar-create@example.com",
+                "email_verified": True,
+            },
+            token_payload={
+                "access_token": "google-access-token-1",
+                "refresh_token": "google-refresh-token-1",
+                "scope": "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+                "expires_at": 1_900_000_000,
+            },
+        ),
+    )
+
+    response = await client.get("/auth/oidc/callback", follow_redirects=False)
+    assert response.status_code == 303
+
+    user = (
+        await db_session.execute(select(User).where(User.email == "calendar-create@example.com"))
+    ).scalar_one()
+    connection = (
+        await db_session.execute(
+            select(ExternalCalendarConnection).where(
+                ExternalCalendarConnection.user_id == user.id,
+                ExternalCalendarConnection.external_calendar_id == "primary",
+            )
+        )
+    ).scalar_one()
+
+    assert connection.access_token == "google-access-token-1"
+    assert connection.refresh_token == "google-refresh-token-1"
+    assert connection.scope is not None
+    assert "calendar.readonly" in connection.scope
+    assert connection.access_token_expires_at is not None
+    assert connection.access_token_expires_at.replace(tzinfo=UTC) == datetime.fromtimestamp(
+        1_900_000_000,
+        tz=UTC,
+    )
+    assert fake_auto_sync_service.synced_connection_ids == [connection.id]
+
+
+@pytest.mark.asyncio
+async def test_oidc_callback_updates_google_calendar_connection_and_preserves_refresh_token(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_ID", "test-client")
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv(
+        "AGENDABLE_OIDC_METADATA_URL",
+        "https://accounts.google.com/.well-known/openid-configuration",
+    )
+    monkeypatch.setenv("AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED", "true")
+
+    existing_user = User(
+        email="calendar-update@example.com",
+        first_name="Cal",
+        last_name="Update",
+        display_name="Cal Update",
+        timezone="UTC",
+        role=UserRole.user,
+        password_hash=None,
+    )
+    db_session.add(existing_user)
+    await db_session.flush()
+
+    db_session.add(
+        ExternalIdentity(
+            user_id=existing_user.id,
+            provider="oidc",
+            subject="sub-calendar-update",
+            email=existing_user.email,
+        )
+    )
+    db_session.add(
+        ExternalCalendarConnection(
+            user_id=existing_user.id,
+            provider="google",
+            external_calendar_id="primary",
+            access_token="old-access-token",
+            refresh_token="stored-refresh-token",
+            scope="openid email profile https://www.googleapis.com/auth/calendar.readonly",
+        )
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        auth_routes,
+        "_oidc_oauth_client",
+        lambda: _FakeOidcClient(
+            {
+                "sub": "sub-calendar-update",
+                "email": "calendar-update@example.com",
+                "email_verified": True,
+            },
+            token_payload={
+                "access_token": "new-access-token",
+                "scope": "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+                "expires_at": 1_950_000_000,
+            },
+        ),
+    )
+
+    response = await client.get("/auth/oidc/callback", follow_redirects=False)
+    assert response.status_code == 303
+
+    connection = (
+        await db_session.execute(
+            select(ExternalCalendarConnection).where(
+                ExternalCalendarConnection.user_id == existing_user.id,
+                ExternalCalendarConnection.external_calendar_id == "primary",
+            )
+        )
+    ).scalar_one()
+
+    assert connection.access_token == "new-access-token"
+    assert connection.refresh_token == "stored-refresh-token"
+    assert connection.access_token_expires_at is not None
+    assert connection.access_token_expires_at.replace(tzinfo=UTC) == datetime.fromtimestamp(
+        1_950_000_000,
+        tz=UTC,
+    )

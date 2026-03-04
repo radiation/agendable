@@ -33,7 +33,7 @@ One-command startup (includes automatic migrations):
 - Mailpit inbox UI: `http://127.0.0.1:8025/`
 - Stop: `docker compose down`
 
-Compose now runs a one-shot `migrate` service (`alembic upgrade head`) before starting both `web` and `reminder-worker`.
+Compose now runs a one-shot `migrate` service (`alembic upgrade head`) before starting `web`, `reminder-worker`, and `calendar-sync-worker`.
 
 The compose setup includes:
 
@@ -41,6 +41,7 @@ The compose setup includes:
 - Mailpit (`axllent/mailpit`) for local email capture/testing
 - `migrate` one-shot service that applies Alembic migrations before app startup
 - `reminder-worker` service that runs `agendable run-reminders-worker` every 30s
+- `calendar-sync-worker` service that runs `agendable run-google-calendar-sync-worker` every 30s
 - A bind mount from local repo to container (`.:/app`)
 - Live reload command in the app container:
 	- `uvicorn agendable.app:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src`
@@ -69,6 +70,8 @@ For a production-oriented GCP deployment (Cloud Run web service, Cloud Run remin
 
 - Initialize DB (creates tables): `uv run agendable init-db`
 - Run reminder sender stub: `uv run agendable run-reminders`
+- Run one-shot Google calendar sync (enabled connections): `uv run agendable run-google-calendar-sync`
+- Run Google calendar sync worker loop: `uv run agendable run-google-calendar-sync-worker`
 
 Email reminders can be enabled by configuring SMTP env vars:
 
@@ -175,6 +178,7 @@ To enable SSO, set:
 - `AGENDABLE_OIDC_CLIENT_ID='...'`
 - `AGENDABLE_OIDC_CLIENT_SECRET='...'`
 - `AGENDABLE_OIDC_METADATA_URL='https://<your-provider>/.well-known/openid-configuration'`
+- `AGENDABLE_OIDC_SCOPE='openid email profile'` (optional override)
 
 Optional login-prompt behavior:
 
@@ -186,6 +190,24 @@ Optional login-prompt behavior:
 Optional restriction:
 
 - `AGENDABLE_ALLOWED_EMAIL_DOMAIN='example.com'` (only allows `@example.com` users)
+
+#### Google Calendar sync groundwork (phase 1)
+
+Calendar import/sync foundation is now behind feature flags and DB schema only; meeting/task auto-linking is not enabled yet.
+
+- `AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED='false'`
+- `AGENDABLE_GOOGLE_CALENDAR_OIDC_ADDITIONAL_SCOPE='https://www.googleapis.com/auth/calendar.readonly'`
+- `AGENDABLE_GOOGLE_CALENDAR_API_BASE_URL='https://www.googleapis.com/calendar/v3'`
+- `AGENDABLE_GOOGLE_CALENDAR_INITIAL_SYNC_DAYS_BACK='90'`
+- `AGENDABLE_GOOGLE_CALENDAR_SYNC_WORKER_POLL_SECONDS='60'`
+
+When `AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED='true'`, Agendable appends the configured additional scope to OIDC authorization requests so users can grant calendar read access during login/link flows.
+
+With the feature enabled, users can manually trigger a sync from Profile via:
+
+- `POST /profile/calendar/google/sync`
+
+This currently syncs the user's Google `primary` calendar into external mirror rows.
 
 #### Managed OIDC testing (Auth0 / Okta / any OIDC provider)
 

@@ -70,4 +70,20 @@ jobs:
             exit 0
           fi
 
-          gh pr create --base main --head "$BRANCH" --title "$TITLE" --body "$BODY"
+          if ! CREATE_OUT="$(gh pr create --base main --head "$BRANCH" --title "$TITLE" --body "$BODY" 2>&1)"; then
+            echo "$CREATE_OUT"
+
+            if echo "$CREATE_OUT" | grep -q "createPullRequest"; then
+              echo ""
+              echo "PR creation was blocked by GitHub repository/org settings."
+              echo "Enable: Settings → Actions → General → Workflow permissions → 'Allow GitHub Actions to create and approve pull requests'."
+              echo "Then re-run this workflow."
+              echo ""
+              echo "Manual fallback: open a PR from the pushed branch '$BRANCH'."
+            fi
+
+            exit 1
+          fi
+
+          echo "$CREATE_OUT"
+

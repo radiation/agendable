@@ -29,6 +29,18 @@ jobs:
       - name: Upgrade lockfile
         run: uv lock --upgrade
 
+      - name: Install dependencies (from updated lockfile)
+        run: uv sync --group dev --frozen
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Mypy
+        run: uv run mypy --strict src
+
+      - name: Pytest
+        run: uv run pytest
+
       - name: Create or update PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

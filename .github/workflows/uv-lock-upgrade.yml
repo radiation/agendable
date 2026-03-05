@@ -1,0 +1,61 @@
+name: Upgrade uv.lock
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # weekly
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  upgrade-uv-lock:
+    name: uv lock --upgrade
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
+
+      - name: Upgrade lockfile
+        run: uv lock --upgrade
+
+      - name: Create or update PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="bot/uv-lock-upgrade"
+          TITLE="chore(deps): upgrade uv.lock"
+          BODY="Automated dependency refresh via \`uv lock --upgrade\`."
+
+          if git diff --quiet; then
+            echo "No changes after uv lock --upgrade; exiting."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -B "$BRANCH"
+          git add uv.lock
+          git commit -m "$TITLE"
+          git push --force --set-upstream origin "$BRANCH"
+
+          PR_NUMBER="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' || true)"
+          if [ -n "$PR_NUMBER" ]; then
+            echo "PR already open (#$PR_NUMBER); branch updated."
+            exit 0
+          fi
+
+          gh pr create --base main --head "$BRANCH" --title "$TITLE" --body "$BODY"

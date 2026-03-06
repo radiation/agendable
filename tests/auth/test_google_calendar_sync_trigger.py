@@ -15,6 +15,7 @@ from agendable.db.models import (
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
+    ExternalRecurringEventDetails,
 )
 from agendable.web.routes.auth import oidc as oidc_routes
 from tests.auth.account_linking_test_helpers import get_user_by_email, signup_and_login
@@ -49,6 +50,28 @@ class _FakeGoogleCalendarClient:
             ],
             next_sync_token="sync-token-manual",
         )
+
+    async def get_recurring_event_details(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None:
+        raise AssertionError("get_recurring_event_details should not be called in this test")
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_recurring_event_backlink should not be called in this test")
 
 
 @pytest.mark.asyncio

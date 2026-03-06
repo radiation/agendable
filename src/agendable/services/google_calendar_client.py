@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
+from urllib.parse import quote
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
+    ExternalRecurringEventDetails,
 )
 
 
@@ -50,6 +53,95 @@ def _parse_external_updated_at(item: dict[str, object]) -> datetime | None:
     if updated_raw is None:
         return None
     return _parse_iso_datetime(updated_raw)
+
+
+def _parse_google_datetime_with_timezone(
+    *,
+    start_obj: object,
+) -> tuple[datetime | None, str | None, bool]:
+    """Parse a Google Calendar start/end object.
+
+    Returns: (datetime, timezone_name, is_all_day)
+    - datetime is tz-aware when possible
+    - timezone_name is from the 'timeZone' field when provided
+    """
+
+    if not isinstance(start_obj, dict):
+        return None, None, False
+
+    tz_name = _optional_str(start_obj.get("timeZone"))
+
+    datetime_raw = _optional_str(start_obj.get("dateTime"))
+    if datetime_raw is not None:
+        normalized = datetime_raw
+        if normalized.endswith("Z"):
+            normalized = f"{normalized[:-1]}+00:00"
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+
+        if tz_name is not None:
+            try:
+                zone = ZoneInfo(tz_name)
+                return parsed.astimezone(zone), tz_name, False
+            except ZoneInfoNotFoundError:
+                return parsed, None, False
+
+        return parsed, None, False
+
+    date_raw = _optional_str(start_obj.get("date"))
+    if date_raw is not None:
+        parsed_date = date.fromisoformat(date_raw)
+        return datetime.combine(parsed_date, time.min, tzinfo=UTC), None, True
+
+    return None, None, False
+
+
+def _extract_first_rrule(recurrence: object) -> str | None:
+    if not isinstance(recurrence, list):
+        return None
+    for item in recurrence:
+        if not isinstance(item, str):
+            continue
+        normalized = item.strip()
+        if not normalized:
+            continue
+        if normalized.upper().startswith("RRULE:"):
+            return normalized[6:].strip() or None
+        if normalized.upper().startswith("FREQ="):
+            return normalized
+    return None
+
+
+def _parse_private_extended_properties(payload: dict[str, object]) -> dict[str, str]:
+    extended = payload.get("extendedProperties")
+    if not isinstance(extended, dict):
+        return {}
+    private = extended.get("private")
+    if not isinstance(private, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in private.items():
+        if isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip():
+            out[k.strip()] = v.strip()
+    return out
+
+
+def _append_agendable_link(description: str | None, url: str) -> str:
+    existing = (description or "").strip()
+    link_line = f"Agendable: {url}".strip()
+    if not existing:
+        return link_line
+
+    # Idempotency: don't duplicate if already present.
+    if link_line in existing:
+        return existing
+
+    # Be conservative: if the URL appears anywhere, don't add another line.
+    if url in existing:
+        return existing
+
+    return f"{existing}\n\n{link_line}"
 
 
 class GoogleCalendarHttpClient:
@@ -126,6 +218,102 @@ class GoogleCalendarHttpClient:
                 break
 
         return ExternalCalendarSyncBatch(events=events, next_sync_token=next_sync_token)
+
+    async def get_recurring_event_details(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None:
+        del refresh_token
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+        encoded_event_id = quote(recurring_event_id, safe="")
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.get(
+                f"{self.api_base_url}/calendars/{calendar_id}/events/{encoded_event_id}",
+                headers=headers,
+            )
+            response.raise_for_status()
+
+            payload: object = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("Google Calendar event response must be a JSON object")
+
+            status = _optional_str(payload.get("status"))
+            if status == "cancelled":
+                return None
+
+            start_dt, start_tz, is_all_day = _parse_google_datetime_with_timezone(
+                start_obj=payload.get("start")
+            )
+            if start_dt is None or is_all_day:
+                return None
+
+            rrule = _extract_first_rrule(payload.get("recurrence"))
+            return ExternalRecurringEventDetails(
+                event_id=recurring_event_id,
+                recurrence_rrule=rrule,
+                recurrence_dtstart=start_dt,
+                recurrence_timezone=start_tz,
+            )
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None:
+        del refresh_token
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+        encoded_event_id = quote(recurring_event_id, safe="")
+        event_url = f"{self.api_base_url}/calendars/{calendar_id}/events/{encoded_event_id}"
+
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            current_resp = await client.get(event_url, headers=headers)
+            current_resp.raise_for_status()
+            payload_obj: object = current_resp.json()
+            if not isinstance(payload_obj, dict):
+                raise ValueError("Google Calendar event response must be a JSON object")
+
+            status = _optional_str(payload_obj.get("status"))
+            if status == "cancelled":
+                return
+
+            current_private = _parse_private_extended_properties(payload_obj)
+            current_series = current_private.get("agendable_series_id")
+
+            current_desc = _optional_str(payload_obj.get("description"))
+            desired_desc = current_desc
+            if agendable_series_url is not None and agendable_series_url.strip():
+                desired_desc = _append_agendable_link(current_desc, agendable_series_url.strip())
+
+            if current_series == agendable_series_id and desired_desc == current_desc:
+                return
+
+            desired_private = dict(current_private)
+            desired_private["agendable_series_id"] = agendable_series_id
+
+            patch_payload: dict[str, object] = {
+                "extendedProperties": {"private": desired_private},
+            }
+            if desired_desc is not None:
+                patch_payload["description"] = desired_desc
+
+            patch_resp = await client.patch(
+                event_url,
+                headers=headers,
+                params={"sendUpdates": "none"},
+                json=patch_payload,
+            )
+            patch_resp.raise_for_status()
 
     def _parse_items(self, items: list[Any]) -> list[ExternalCalendarEvent]:
         parsed: list[ExternalCalendarEvent] = []

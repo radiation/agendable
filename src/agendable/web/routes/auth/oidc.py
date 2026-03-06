@@ -188,6 +188,7 @@ async def sync_google_calendar_now(
         event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
         calendar_client=build_google_calendar_client(),
         event_mapper=CalendarEventMappingService(session=session),
+        settings=settings,
     )
     try:
         synced_event_count = await sync_service.sync_connection(connection)

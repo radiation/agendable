@@ -5,15 +5,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+from sqlalchemy import select
+
 from agendable.db.models import (
     CalendarProvider,
     ExternalCalendarConnection,
     ExternalCalendarEventMirror,
+    MeetingOccurrence,
+    MeetingSeries,
 )
 from agendable.db.repos import (
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
 )
+from agendable.settings import Settings
 
 
 @dataclass(frozen=True)
@@ -27,6 +32,20 @@ class ExternalCalendarEvent:
     end_at: datetime | None
     is_all_day: bool
     external_updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ExternalRecurringEventDetails:
+    """Details for a recurring *master* event.
+
+    For Google Calendar, `event_id` here is the recurring master event id
+    referenced by instances via `recurringEventId`.
+    """
+
+    event_id: str
+    recurrence_rrule: str | None
+    recurrence_dtstart: datetime | None
+    recurrence_timezone: str | None
 
 
 @dataclass(frozen=True)
@@ -45,6 +64,26 @@ class GoogleCalendarClient(Protocol):
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch: ...
 
+    async def get_recurring_event_details(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None: ...
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None: ...
+
 
 class CalendarEventMapper(Protocol):
     async def map_mirrors(
@@ -52,6 +91,7 @@ class CalendarEventMapper(Protocol):
         *,
         connection: ExternalCalendarConnection,
         mirrors: list[ExternalCalendarEventMirror],
+        recurring_event_details_by_id: dict[str, ExternalRecurringEventDetails],
     ) -> int: ...
 
 
@@ -63,11 +103,13 @@ class GoogleCalendarSyncService:
         event_mirror_repo: ExternalCalendarEventMirrorRepository,
         calendar_client: GoogleCalendarClient,
         event_mapper: CalendarEventMapper | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.connection_repo = connection_repo
         self.event_mirror_repo = event_mirror_repo
         self.calendar_client = calendar_client
         self.event_mapper = event_mapper
+        self.settings = settings
 
     async def sync_connection(self, connection: ExternalCalendarConnection) -> int:
         if not connection.access_token:
@@ -93,7 +135,33 @@ class GoogleCalendarSyncService:
             )
 
         if self.event_mapper is not None and touched_mirrors:
-            await self.event_mapper.map_mirrors(connection=connection, mirrors=touched_mirrors)
+            recurring_ids = {
+                m.external_recurring_event_id
+                for m in touched_mirrors
+                if m.external_recurring_event_id is not None
+            }
+
+            recurring_event_details_by_id: dict[str, ExternalRecurringEventDetails] = {}
+            for recurring_event_id in recurring_ids:
+                details = await self.calendar_client.get_recurring_event_details(
+                    access_token=connection.access_token,
+                    refresh_token=connection.refresh_token,
+                    calendar_id=connection.external_calendar_id,
+                    recurring_event_id=recurring_event_id,
+                )
+                if details is not None:
+                    recurring_event_details_by_id[recurring_event_id] = details
+
+            await self.event_mapper.map_mirrors(
+                connection=connection,
+                mirrors=touched_mirrors,
+                recurring_event_details_by_id=recurring_event_details_by_id,
+            )
+
+            await self._maybe_write_back_recurring_backlinks(
+                connection=connection,
+                recurring_event_ids=sorted(recurring_ids),
+            )
 
         connection.sync_token = batch.next_sync_token
         connection.last_synced_at = datetime.now(UTC)
@@ -102,6 +170,82 @@ class GoogleCalendarSyncService:
         await self.connection_repo.commit()
 
         return len(batch.events)
+
+    async def _maybe_write_back_recurring_backlinks(
+        self,
+        *,
+        connection: ExternalCalendarConnection,
+        recurring_event_ids: list[str],
+    ) -> None:
+        if not recurring_event_ids:
+            return
+
+        settings = self.settings
+        if settings is None or not settings.google_calendar_backlink_enabled:
+            return
+
+        if not connection.access_token:
+            return
+
+        # Requires a write scope; default is readonly.
+        scopes = set((connection.scope or "").split())
+        has_write_scope = any(
+            s in scopes
+            for s in {
+                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/calendar.events.owned",
+            }
+        )
+        if not has_write_scope:
+            return
+
+        base_url = (settings.public_base_url or "").strip().rstrip("/")
+        if not base_url:
+            # Without a public base URL we can still store the private key,
+            # but avoid partially implementing the requested "link" behavior.
+            return
+
+        for recurring_event_id in recurring_event_ids:
+            series = await self._find_series_for_recurring_event(
+                connection_id=connection.id,
+                recurring_event_id=recurring_event_id,
+            )
+            if series is None:
+                continue
+
+            series_url = f"{base_url}/series/{series.id}"
+            await self.calendar_client.upsert_recurring_event_backlink(
+                access_token=connection.access_token,
+                refresh_token=connection.refresh_token,
+                calendar_id=connection.external_calendar_id,
+                recurring_event_id=recurring_event_id,
+                agendable_series_id=str(series.id),
+                agendable_series_url=series_url,
+            )
+
+    async def _find_series_for_recurring_event(
+        self,
+        *,
+        connection_id: object,
+        recurring_event_id: str,
+    ) -> MeetingSeries | None:
+        session = self.event_mirror_repo.session
+        result = await session.execute(
+            select(MeetingSeries)
+            .join(MeetingOccurrence, MeetingOccurrence.series_id == MeetingSeries.id)
+            .join(
+                ExternalCalendarEventMirror,
+                ExternalCalendarEventMirror.linked_occurrence_id == MeetingOccurrence.id,
+            )
+            .where(
+                ExternalCalendarEventMirror.connection_id == connection_id,
+                ExternalCalendarEventMirror.external_recurring_event_id == recurring_event_id,
+            )
+            .order_by(MeetingSeries.created_at.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def sync_all_enabled_connections(self) -> int:
         synced_event_count = 0

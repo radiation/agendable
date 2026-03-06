@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # For local development
     auto_create_db: bool = False
 
+    # Public base URL (used for generating absolute links in external systems)
+    # Example: "https://app.agendable.com"
+    public_base_url: str | None = None
+
     # Session cookie auth (MVP). In production, override via env.
     session_secret: SecretStr = SecretStr("dev-insecure-change-me")
     session_cookie_name: str = "agendable_session"
@@ -85,6 +89,10 @@ class Settings(BaseSettings):
     google_calendar_api_base_url: str = "https://www.googleapis.com/calendar/v3"
     google_calendar_initial_sync_days_back: int = Field(default=90, ge=1)
     google_calendar_sync_worker_poll_seconds: int = Field(default=60, ge=1)
+
+    # Optional: write a backlink + stable key back to Google Calendar invites.
+    # Requires a write scope such as: https://www.googleapis.com/auth/calendar.events
+    google_calendar_backlink_enabled: bool = False
 
 
 def get_settings() -> Settings:

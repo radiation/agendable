@@ -73,6 +73,18 @@ class _FakeGoogleCalendarClient:
     ) -> None:
         raise AssertionError("upsert_recurring_event_backlink should not be called in this test")
 
+    async def upsert_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_event_backlink should not be called in this test")
+
 
 @pytest.mark.asyncio
 async def test_google_calendar_sync_route_disabled_returns_404(

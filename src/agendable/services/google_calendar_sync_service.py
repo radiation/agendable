@@ -92,6 +92,17 @@ class GoogleCalendarClient(Protocol):
         agendable_series_url: str | None,
     ) -> None: ...
 
+    async def upsert_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None: ...
+
 
 class CalendarEventMapper(Protocol):
     async def map_mirrors(
@@ -190,10 +201,35 @@ class GoogleCalendarSyncService:
             recurring_event_details_by_id=details_by_id,
         )
 
-        await self._maybe_write_back_recurring_backlinks(
+        await self._maybe_write_back_backlinks(
             connection=connection,
+            mirrors=mirrors,
             recurring_event_ids=sorted(recurring_event_ids),
         )
+
+    async def _maybe_write_back_backlinks(
+        self,
+        *,
+        connection: ExternalCalendarConnection,
+        mirrors: Sequence[ExternalCalendarEventMirror],
+        recurring_event_ids: list[str],
+    ) -> None:
+        settings = self.settings
+        if settings is None:
+            return
+
+        target = settings.google_calendar_backlink_target
+        if target in {"series", "both"}:
+            await self._maybe_write_back_recurring_backlinks(
+                connection=connection,
+                recurring_event_ids=recurring_event_ids,
+            )
+
+        if target in {"occurrence", "both"}:
+            await self._maybe_write_back_occurrence_backlinks(
+                connection=connection,
+                mirrors=mirrors,
+            )
 
     def _recurring_event_ids(self, mirrors: Sequence[ExternalCalendarEventMirror]) -> set[str]:
         out: set[str] = set()
@@ -250,6 +286,33 @@ class GoogleCalendarSyncService:
             recurring_event_ids=recurring_event_ids,
             base_url=base_url,
         )
+
+    async def _maybe_write_back_occurrence_backlinks(
+        self,
+        *,
+        connection: ExternalCalendarConnection,
+        mirrors: Sequence[ExternalCalendarEventMirror],
+    ) -> None:
+        base_url = self._resolve_backlink_base_url(connection)
+        if base_url is None:
+            return
+
+        access_token = self._require_access_token(connection)
+        for mirror in mirrors:
+            if mirror.external_event_id is None or mirror.linked_occurrence_id is None:
+                continue
+            if mirror.external_status == "cancelled":
+                continue
+
+            occurrence_url = f"{base_url}/occurrences/{mirror.linked_occurrence_id}"
+            await self.calendar_client.upsert_event_backlink(
+                access_token=access_token,
+                refresh_token=connection.refresh_token,
+                calendar_id=connection.external_calendar_id,
+                event_id=mirror.external_event_id,
+                agendable_occurrence_id=str(mirror.linked_occurrence_id),
+                agendable_occurrence_url=occurrence_url,
+            )
 
     def _resolve_backlink_base_url(self, connection: ExternalCalendarConnection) -> str | None:
         settings = self.settings

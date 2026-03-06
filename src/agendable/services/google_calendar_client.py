@@ -144,6 +144,11 @@ def _append_agendable_link(description: str | None, url: str) -> str:
     return f"{existing}\n\n{link_line}"
 
 
+def _event_url(*, api_base_url: str, calendar_id: str, event_id: str) -> str:
+    encoded_event_id = quote(event_id, safe="")
+    return f"{api_base_url}/calendars/{calendar_id}/events/{encoded_event_id}"
+
+
 class GoogleCalendarHttpClient:
     def __init__(
         self,
@@ -273,8 +278,11 @@ class GoogleCalendarHttpClient:
         del refresh_token
 
         headers = {"Authorization": f"Bearer {access_token}"}
-        encoded_event_id = quote(recurring_event_id, safe="")
-        event_url = f"{self.api_base_url}/calendars/{calendar_id}/events/{encoded_event_id}"
+        event_url = _event_url(
+            api_base_url=self.api_base_url,
+            calendar_id=calendar_id,
+            event_id=recurring_event_id,
+        )
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             current_resp = await client.get(event_url, headers=headers)
@@ -300,6 +308,66 @@ class GoogleCalendarHttpClient:
 
             desired_private = dict(current_private)
             desired_private["agendable_series_id"] = agendable_series_id
+
+            patch_payload: dict[str, object] = {
+                "extendedProperties": {"private": desired_private},
+            }
+            if desired_desc is not None:
+                patch_payload["description"] = desired_desc
+
+            patch_resp = await client.patch(
+                event_url,
+                headers=headers,
+                params={"sendUpdates": "none"},
+                json=patch_payload,
+            )
+            patch_resp.raise_for_status()
+
+    async def upsert_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None:
+        del refresh_token
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+        event_url = _event_url(
+            api_base_url=self.api_base_url,
+            calendar_id=calendar_id,
+            event_id=event_id,
+        )
+
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            current_resp = await client.get(event_url, headers=headers)
+            current_resp.raise_for_status()
+            payload_obj: object = current_resp.json()
+            if not isinstance(payload_obj, dict):
+                raise ValueError("Google Calendar event response must be a JSON object")
+
+            status = _optional_str(payload_obj.get("status"))
+            if status == "cancelled":
+                return
+
+            current_private = _parse_private_extended_properties(payload_obj)
+            current_occurrence = current_private.get("agendable_occurrence_id")
+
+            current_desc = _optional_str(payload_obj.get("description"))
+            desired_desc = current_desc
+            if agendable_occurrence_url is not None and agendable_occurrence_url.strip():
+                desired_desc = _append_agendable_link(
+                    current_desc, agendable_occurrence_url.strip()
+                )
+
+            if current_occurrence == agendable_occurrence_id and desired_desc == current_desc:
+                return
+
+            desired_private = dict(current_private)
+            desired_private["agendable_occurrence_id"] = agendable_occurrence_id
 
             patch_payload: dict[str, object] = {
                 "extendedProperties": {"private": desired_private},

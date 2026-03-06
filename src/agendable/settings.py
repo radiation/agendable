@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     # Optional: write a backlink + stable key back to Google Calendar invites.
     # Requires a write scope such as: https://www.googleapis.com/auth/calendar.events
     google_calendar_backlink_enabled: bool = False
+    # Which event(s) to patch when backlink is enabled:
+    # - "series": recurring master event only
+    # - "occurrence": each mapped instance event
+    # - "both": master + instances
+    google_calendar_backlink_target: Literal["series", "occurrence", "both"] = "series"
 
 
 def get_settings() -> Settings:

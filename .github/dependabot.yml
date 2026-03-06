@@ -25,7 +25,8 @@ updates:
         patterns:
           - "*"
 
-    # Keep `pyproject.toml` as the source of truth for constraints,
-    # and let Dependabot update `uv.lock` for resolved versions.
-    versioning-strategy: lockfile-only
+    # Keep `pyproject.toml` as the source of truth for constraints.
+    # With `increase`, Dependabot will bump minimum constraints in
+    # `pyproject.toml` (e.g., fastapi>=X) and also refresh `uv.lock`.
+    versioning-strategy: increase
     open-pull-requests-limit: 10

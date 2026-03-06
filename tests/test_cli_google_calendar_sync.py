@@ -57,19 +57,27 @@ async def test_run_google_calendar_sync_is_noop_when_feature_disabled(
 async def test_run_google_calendar_sync_executes_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    settings = SimpleNamespace(
+        google_calendar_sync_enabled=True,
+        google_calendar_api_base_url="https://www.googleapis.com/calendar/v3",
+        google_calendar_initial_sync_days_back=90,
+    )
     monkeypatch.setattr(
         cli,
         "get_settings",
-        lambda: SimpleNamespace(
-            google_calendar_sync_enabled=True,
-            google_calendar_api_base_url="https://www.googleapis.com/calendar/v3",
-            google_calendar_initial_sync_days_back=90,
-        ),
+        lambda: settings,
     )
     monkeypatch.setattr(db, "SessionMaker", lambda: _FakeSessionContext())
     monkeypatch.setattr(cli, "ExternalCalendarConnectionRepository", _DummyConnectionRepo)
     monkeypatch.setattr(cli, "ExternalCalendarEventMirrorRepository", _DummyMirrorRepo)
-    monkeypatch.setattr(cli, "GoogleCalendarSyncService", _FakeSyncService)
+    captured: dict[str, object] = {}
+
+    def _capture_sync_service(**kwargs: object) -> _FakeSyncService:
+        captured.update(kwargs)
+        return _FakeSyncService(**kwargs)
+
+    monkeypatch.setattr(cli, "GoogleCalendarSyncService", _capture_sync_service)
 
     synced = await cli._run_google_calendar_sync()
     assert synced == 7
+    assert captured.get("settings") is settings

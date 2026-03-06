@@ -133,15 +133,24 @@ def _append_agendable_link(description: str | None, url: str) -> str:
     if not existing:
         return link_line
 
-    # Idempotency: don't duplicate if already present.
-    if link_line in existing:
-        return existing
+    # If an Agendable link line exists already, replace it (supports base-url changes).
+    lines = existing.splitlines()
+    replaced = False
+    out_lines: list[str] = []
+    for line in lines:
+        if line.strip().startswith("Agendable:"):
+            if not replaced:
+                out_lines.append(link_line)
+                replaced = True
+            continue
+        out_lines.append(line)
 
-    # Be conservative: if the URL appears anywhere, don't add another line.
-    if url in existing:
-        return existing
+    rebuilt = "\n".join(out_lines).strip()
+    if replaced:
+        return rebuilt
 
-    return f"{existing}\n\n{link_line}"
+    # Otherwise append a new line at the end.
+    return f"{rebuilt}\n\n{link_line}".strip()
 
 
 def _event_url(*, api_base_url: str, calendar_id: str, event_id: str) -> str:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC
-from zoneinfo import ZoneInfo
+import uuid
+from datetime import UTC, datetime, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.rrule import rrulestr
 from sqlalchemy import select, update
@@ -10,6 +11,64 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agendable.db.models import AgendaItem, MeetingOccurrence, MeetingSeries, Task
 from agendable.db.repos import MeetingOccurrenceRepository
 from agendable.recurrence import normalize_rrule
+
+
+def _coerce_tzinfo(*, dtstart_tzinfo: tzinfo | None, timezone_name: str) -> tzinfo:
+    if dtstart_tzinfo is None:
+        dtstart_tzinfo = UTC
+    if not timezone_name.strip():
+        return dtstart_tzinfo
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        return dtstart_tzinfo
+
+
+def _ensure_dt_aware_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
+
+
+def _compute_next_occurrence_utc(
+    *,
+    rrule: str,
+    dtstart: datetime,
+    timezone_name: str,
+    scheduled_after: datetime,
+) -> datetime | None:
+    dtstart = _ensure_dt_aware_utc(dtstart)
+    scheduled_after = _ensure_dt_aware_utc(scheduled_after)
+
+    tzinfo = _coerce_tzinfo(dtstart_tzinfo=dtstart.tzinfo, timezone_name=timezone_name)
+    local_dtstart = dtstart.astimezone(tzinfo)
+    local_after = scheduled_after.astimezone(tzinfo)
+
+    rule = rrulestr(normalize_rrule(rrule), dtstart=local_dtstart)
+    next_local = rule.after(local_after, inc=False)
+    if next_local is None:
+        return None
+    if next_local.tzinfo is None:
+        next_local = next_local.replace(tzinfo=tzinfo)
+    return next_local.astimezone(UTC)
+
+
+async def _get_occurrence_by_scheduled_at(
+    session: AsyncSession,
+    *,
+    series_id: uuid.UUID,
+    scheduled_at: datetime,
+) -> MeetingOccurrence | None:
+    return (
+        await session.execute(
+            select(MeetingOccurrence)
+            .where(
+                MeetingOccurrence.series_id == series_id,
+                MeetingOccurrence.scheduled_at == scheduled_at,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
 
 async def _ensure_next_occurrence_from_rrule(
@@ -26,43 +85,21 @@ async def _ensure_next_occurrence_from_rrule(
     if not rrule or dtstart is None:
         return None
 
-    if dtstart.tzinfo is None:
-        dtstart = dtstart.replace(tzinfo=UTC)
-
     timezone_name = (series.recurrence_timezone or "").strip()
-    tzinfo = dtstart.tzinfo
-    if timezone_name:
-        try:
-            tzinfo = ZoneInfo(timezone_name)
-        except Exception:
-            tzinfo = dtstart.tzinfo
-
-    after_dt = occurrence.scheduled_at
-    if after_dt.tzinfo is None:
-        after_dt = after_dt.replace(tzinfo=UTC)
-
-    local_dtstart = dtstart.astimezone(tzinfo)
-    local_after = after_dt.astimezone(tzinfo)
-
-    rule = rrulestr(normalize_rrule(rrule), dtstart=local_dtstart)
-    next_local = rule.after(local_after, inc=False)
-    if next_local is None:
+    next_utc = _compute_next_occurrence_utc(
+        rrule=rrule,
+        dtstart=dtstart,
+        timezone_name=timezone_name,
+        scheduled_after=occurrence.scheduled_at,
+    )
+    if next_utc is None:
         return None
 
-    if next_local.tzinfo is None:
-        next_local = next_local.replace(tzinfo=tzinfo)
-
-    next_utc = next_local.astimezone(UTC)
-    existing = (
-        await session.execute(
-            select(MeetingOccurrence)
-            .where(
-                MeetingOccurrence.series_id == occurrence.series_id,
-                MeetingOccurrence.scheduled_at == next_utc,
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    existing = await _get_occurrence_by_scheduled_at(
+        session,
+        series_id=occurrence.series_id,
+        scheduled_at=next_utc,
+    )
     if existing is not None:
         return existing
 
@@ -82,7 +119,7 @@ async def complete_occurrence_and_roll_forward(
     *,
     occurrence: MeetingOccurrence,
     commit: bool = True,
-    create_next_if_missing: bool = False,
+    create_next_if_missing: bool = True,
 ) -> MeetingOccurrence | None:
     occ_repo = MeetingOccurrenceRepository(session)
     next_occurrence = await occ_repo.get_next_for_series(

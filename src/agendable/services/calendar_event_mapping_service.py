@@ -13,6 +13,7 @@ from agendable.db.models import (
     MeetingSeries,
 )
 from agendable.services.google_calendar_sync_service import ExternalRecurringEventDetails
+from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
 
 
 class CalendarEventMappingService:
@@ -49,7 +50,12 @@ class CalendarEventMappingService:
         if mirror.external_status == "cancelled":
             if linked_occurrence is None:
                 return 0
-            linked_occurrence.is_completed = True
+            await complete_occurrence_and_roll_forward(
+                self.session,
+                occurrence=linked_occurrence,
+                commit=False,
+                create_next_if_missing=True,
+            )
             return 1
 
         if mirror.start_at is None or mirror.is_all_day:

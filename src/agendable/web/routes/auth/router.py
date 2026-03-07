@@ -44,6 +44,12 @@ def _auth_oidc_enabled() -> bool:
     return auth_routes.oidc_enabled()
 
 
+def _auth_keycloak_oidc_enabled() -> bool:
+    from agendable.web.routes import auth as auth_routes
+
+    return auth_routes.keycloak_oidc_enabled()
+
+
 def is_bootstrap_admin_email(email: str) -> bool:
     configured = get_settings().bootstrap_admin_email
     if configured is None:
@@ -74,6 +80,7 @@ def render_login_template(
             "error": error,
             "current_user": None,
             "oidc_enabled": _auth_oidc_enabled(),
+            "keycloak_oidc_enabled": _auth_keycloak_oidc_enabled(),
         },
         status_code=status_code,
     )
@@ -143,6 +150,17 @@ def oidc_oauth_client() -> OidcClient:
     return _oidc_oauth_client()
 
 
+def _keycloak_oidc_oauth_client() -> OidcClient:
+    client = oauth.create_client("oidc_keycloak")
+    if client is None:
+        raise RuntimeError("Keycloak OIDC OAuth client is not configured")
+    return cast(OidcClient, client)
+
+
+def keycloak_oidc_oauth_client() -> OidcClient:
+    return _keycloak_oidc_oauth_client()
+
+
 async def render_profile_template(
     request: Request,
     *,
@@ -169,6 +187,8 @@ async def render_profile_template(
             "identities": identities,
             "identity_error": identity_error,
             "oidc_enabled": _auth_oidc_enabled(),
+            "keycloak_oidc_enabled": _auth_keycloak_oidc_enabled(),
+            "any_oidc_enabled": _auth_oidc_enabled() or _auth_keycloak_oidc_enabled(),
             "google_calendar_sync_enabled": settings.google_calendar_sync_enabled,
             "google_calendar_connected": google_calendar_connection is not None,
         },

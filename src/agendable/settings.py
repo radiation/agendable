@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # For local development
     auto_create_db: bool = False
 
+    # Runtime environment (used for gating non-production-only features).
+    environment: Literal["local", "development", "staging", "production", "test"] = "local"
+
     # Public base URL (used for generating absolute links in external systems)
     # Example: "https://app.agendable.com"
     public_base_url: str | None = None
@@ -77,6 +80,15 @@ class Settings(BaseSettings):
     # Set to empty string to omit prompt from authorize requests.
     oidc_auth_prompt: str | None = "select_account"
     oidc_scope: str = "openid email profile"
+
+    # Optional: a second OIDC provider (Keycloak) for SSO.
+    # When configured, this is separate from the primary (currently Google) OIDC flow.
+    keycloak_oidc_client_id: str | None = None
+    keycloak_oidc_client_secret: SecretStr | None = None
+    keycloak_oidc_metadata_url: str | None = None
+    keycloak_oidc_scope: str = "openid email profile"
+    # Allow Keycloak SSO outside production by default; override to false to hide it locally.
+    keycloak_oidc_allow_non_production: bool = True
     # If set, only allow users with emails in this domain (e.g. "example.com").
     allowed_email_domain: str | None = None
 

@@ -77,11 +77,12 @@ async def _render_already_linked_error(
     *,
     session: AsyncSession,
     link_user: User,
+    identity_provider: str,
     sub: str,
     debug_oidc: bool,
 ) -> Response:
     ext_repo = ExternalIdentityRepository(session)
-    ext = await ext_repo.get_by_provider_subject("oidc", sub)
+    ext = await ext_repo.get_by_provider_subject(identity_provider, sub)
     clear_oidc_link_user_id(request)
     audit_oidc_denied(
         event=OIDC_EVENT_IDENTITY_LINK,
@@ -145,12 +146,15 @@ async def _maybe_create_identity(
     *,
     link_user: User,
     create_identity: bool,
+    identity_provider: str,
     sub: str,
     email: str,
 ) -> None:
     if not create_identity:
         return
-    ext = ExternalIdentity(user_id=link_user.id, provider="oidc", subject=sub, email=email)
+    ext = ExternalIdentity(
+        user_id=link_user.id, provider=identity_provider, subject=sub, email=email
+    )
     session.add(ext)
     await session.commit()
 
@@ -159,9 +163,12 @@ async def _maybe_upsert_google_calendar_connection(
     session: AsyncSession,
     *,
     link_user: User,
+    allow_google_calendar_token_capture: bool,
     token_capture: OidcTokenCapture,
     settings: Settings,
 ) -> None:
+    if not allow_google_calendar_token_capture:
+        return
     if not should_capture_google_calendar_token(settings=settings, token_capture=token_capture):
         return
 
@@ -177,6 +184,8 @@ async def handle_link_callback(
     request: Request,
     *,
     session: AsyncSession,
+    identity_provider: str,
+    allow_google_calendar_token_capture: bool,
     link_user_id: uuid.UUID,
     sub: str,
     email: str,
@@ -196,6 +205,7 @@ async def handle_link_callback(
 
     link_resolution = await resolve_oidc_link_resolution(
         session,
+        provider=identity_provider,
         link_user=link_user,
         sub=sub,
         email=email,
@@ -210,6 +220,7 @@ async def handle_link_callback(
             request,
             session=session,
             link_user=link_user,
+            identity_provider=identity_provider,
             sub=sub,
             debug_oidc=debug_oidc,
         )
@@ -227,12 +238,14 @@ async def handle_link_callback(
         session,
         link_user=link_user,
         create_identity=link_resolution.create_identity,
+        identity_provider=identity_provider,
         sub=sub,
         email=email,
     )
     await _maybe_upsert_google_calendar_connection(
         session,
         link_user=link_user,
+        allow_google_calendar_token_capture=allow_google_calendar_token_capture,
         token_capture=token_capture,
         settings=settings,
     )

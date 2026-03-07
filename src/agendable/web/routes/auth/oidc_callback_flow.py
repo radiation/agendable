@@ -106,6 +106,8 @@ async def handle_login_callback(
     request: Request,
     *,
     session: AsyncSession,
+    identity_provider: str,
+    allow_google_calendar_token_capture: bool,
     sub: str,
     email: str,
     userinfo: Mapping[str, object],
@@ -116,6 +118,7 @@ async def handle_login_callback(
 ) -> Response:
     login_resolution = await resolve_oidc_login_resolution(
         session,
+        provider=identity_provider,
         sub=sub,
         email=email,
         userinfo=userinfo,
@@ -136,12 +139,15 @@ async def handle_login_callback(
         session=session,
         user=user,
         create_identity=login_resolution.create_identity,
+        identity_provider=identity_provider,
         sub=sub,
         email=email,
         debug_oidc=debug_oidc,
     )
 
-    if should_capture_google_calendar_token(settings=settings, token_capture=token_capture):
+    if allow_google_calendar_token_capture and should_capture_google_calendar_token(
+        settings=settings, token_capture=token_capture
+    ):
         connection_repo = ExternalCalendarConnectionRepository(session)
         connection = await upsert_google_primary_calendar_connection(
             connection_repo=connection_repo,
@@ -218,6 +224,7 @@ async def _create_login_identity_if_needed(
     session: AsyncSession,
     user: User,
     create_identity: bool,
+    identity_provider: str,
     sub: str,
     email: str,
     debug_oidc: bool,
@@ -227,7 +234,7 @@ async def _create_login_identity_if_needed(
 
     if debug_oidc:
         logger.info("OIDC callback linking or creating SSO identity for email=%s", email)
-    ext = ExternalIdentity(user_id=user.id, provider="oidc", subject=sub, email=email)
+    ext = ExternalIdentity(user_id=user.id, provider=identity_provider, subject=sub, email=email)
     session.add(ext)
     await session.commit()
 

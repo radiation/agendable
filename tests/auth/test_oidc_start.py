@@ -87,3 +87,25 @@ async def test_oidc_start_uses_configured_custom_prompt(
     assert response.status_code == 302
     assert response.headers["location"] == "https://idp.example.test/authorize"
     assert fake_client.last_prompt == "login"
+
+
+@pytest.mark.asyncio
+async def test_keycloak_oidc_start_uses_prompt(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENDABLE_KEYCLOAK_OIDC_CLIENT_ID", "test-client")
+    monkeypatch.setenv("AGENDABLE_KEYCLOAK_OIDC_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv(
+        "AGENDABLE_KEYCLOAK_OIDC_METADATA_URL",
+        "https://example.com/.well-known/openid-configuration",
+    )
+    monkeypatch.setenv("AGENDABLE_OIDC_AUTH_PROMPT", "login")
+
+    fake_client = _FakeOidcStartClient()
+    monkeypatch.setattr(auth_routes, "_keycloak_oidc_oauth_client", lambda: fake_client)
+
+    response = await client.get("/auth/oidc/keycloak/start", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://idp.example.test/authorize"
+    assert fake_client.last_prompt == "login"

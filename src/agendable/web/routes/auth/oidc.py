@@ -83,6 +83,33 @@ async def oidc_start(request: Request) -> Response:
     return await oidc_client.authorize_redirect(request, redirect_uri, **authorize_params)
 
 
+@router.get("/auth/oidc/keycloak/start", response_class=RedirectResponse)
+async def keycloak_oidc_start(request: Request) -> Response:
+    settings = get_settings()
+    if not auth_routes.keycloak_oidc_enabled():
+        if settings.oidc_debug_logging:
+            logger.info("Keycloak OIDC start aborted: provider is disabled")
+        raise HTTPException(status_code=404)
+
+    redirect_uri = str(request.url_for("keycloak_oidc_callback"))
+    if settings.oidc_debug_logging:
+        log_with_fields(
+            logger,
+            logging.INFO,
+            "keycloak oidc start redirect initiated",
+            redirect_uri=redirect_uri,
+        )
+
+    client_fn = getattr(
+        auth_routes,
+        "_keycloak_oidc_oauth_client",
+        auth_routes.keycloak_oidc_oauth_client,
+    )
+    oidc_client = client_fn()
+    authorize_params = build_authorize_params(settings.oidc_auth_prompt)
+    return await oidc_client.authorize_redirect(request, redirect_uri, **authorize_params)
+
+
 @router.get("/auth/oidc/callback", name="oidc_callback")
 async def oidc_callback(
     request: Request,
@@ -133,6 +160,8 @@ async def oidc_callback(
         return await handle_link_callback(
             request,
             session=session,
+            identity_provider="oidc",
+            allow_google_calendar_token_capture=True,
             link_user_id=link_user_id,
             sub=sub,
             email=email,
@@ -144,6 +173,89 @@ async def oidc_callback(
     return await handle_login_callback(
         request,
         session=session,
+        identity_provider="oidc",
+        allow_google_calendar_token_capture=True,
+        sub=sub,
+        email=email,
+        userinfo=userinfo,
+        debug_oidc=debug_oidc,
+        link_user_id=link_user_id,
+        token_capture=token_capture,
+        settings=settings,
+    )
+
+
+@router.get("/auth/oidc/keycloak/callback", name="keycloak_oidc_callback")
+async def keycloak_oidc_callback(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    settings = get_settings()
+    debug_oidc = settings.oidc_debug_logging
+    link_user_id = get_oidc_link_user_id(request)
+
+    if not auth_routes.keycloak_oidc_enabled():
+        audit_oidc_denied(event=OIDC_EVENT_CALLBACK, reason=OIDC_REASON_PROVIDER_DISABLED)
+        if debug_oidc:
+            logger.info("Keycloak OIDC callback aborted: provider is disabled")
+        raise HTTPException(status_code=404)
+
+    client_fn = getattr(
+        auth_routes,
+        "_keycloak_oidc_oauth_client",
+        auth_routes.keycloak_oidc_oauth_client,
+    )
+
+    identity_or_response = await extract_oidc_identity_or_response(
+        request,
+        oidc_client=client_fn(),
+        debug_oidc=debug_oidc,
+        link_user_id=link_user_id,
+        session=session,
+    )
+    if isinstance(identity_or_response, Response):
+        return identity_or_response
+
+    sub, email, userinfo, token_capture = identity_or_response
+
+    domain_error = domain_block_response(
+        request,
+        email=email,
+        debug_oidc=debug_oidc,
+        allowed_email_domain=settings.allowed_email_domain,
+    )
+    if domain_error is not None:
+        return domain_error
+
+    rate_limit_error = await rate_limit_block_response(
+        request,
+        settings=settings,
+        link_user_id=link_user_id,
+        email=email,
+        session=session,
+    )
+    if rate_limit_error is not None:
+        return rate_limit_error
+
+    if link_user_id is not None:
+        return await handle_link_callback(
+            request,
+            session=session,
+            identity_provider="keycloak",
+            allow_google_calendar_token_capture=False,
+            link_user_id=link_user_id,
+            sub=sub,
+            email=email,
+            debug_oidc=debug_oidc,
+            token_capture=token_capture,
+            settings=settings,
+        )
+
+    return await handle_login_callback(
+        request,
+        session=session,
+        identity_provider="keycloak",
+        allow_google_calendar_token_capture=False,
         sub=sub,
         email=email,
         userinfo=userinfo,
@@ -263,6 +375,8 @@ async def start_profile_identity_link(
 
     set_oidc_link_user_id(request, user.id)
     audit_oidc_success(event=OIDC_EVENT_IDENTITY_LINK_START, actor=user)
+    if auth_routes.keycloak_oidc_enabled():
+        return RedirectResponse(url="/auth/oidc/keycloak/start", status_code=303)
     return RedirectResponse(url="/auth/oidc/start", status_code=303)
 
 

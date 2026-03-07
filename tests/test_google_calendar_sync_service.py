@@ -13,6 +13,7 @@ from agendable.db.models import (
     ExternalCalendarEventMirror,
     MeetingOccurrence,
     MeetingSeries,
+    Task,
     User,
 )
 from agendable.db.repos import (
@@ -23,6 +24,7 @@ from agendable.services.calendar_event_mapping_service import CalendarEventMappi
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
+    ExternalRecurringEventDetails,
     GoogleCalendarSyncService,
 )
 
@@ -30,6 +32,40 @@ from agendable.services.google_calendar_sync_service import (
 class _FakeGoogleCalendarClient:
     def __init__(self, batch: ExternalCalendarSyncBatch) -> None:
         self.batch = batch
+
+    async def get_recurring_event_details(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None:
+        raise AssertionError("get_recurring_event_details should not be called in this test")
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_recurring_event_backlink should not be called in this test")
+
+    async def upsert_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_event_backlink should not be called in this test")
 
     async def list_events(
         self,
@@ -60,6 +96,40 @@ class _FakeBootstrapRecoveryClient:
     ) -> ExternalCalendarSyncBatch:
         self.received_sync_tokens.append(sync_token)
         return ExternalCalendarSyncBatch(events=[], next_sync_token="sync-token-after-recovery")
+
+    async def get_recurring_event_details(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None:
+        raise AssertionError("get_recurring_event_details should not be called in this test")
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_recurring_event_backlink should not be called in this test")
+
+    async def upsert_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_event_backlink should not be called in this test")
 
 
 @pytest.mark.asyncio
@@ -125,29 +195,158 @@ async def test_google_calendar_sync_service_upserts_mirror_and_sync_token(
     ).scalar_one()
     assert mirror.summary == "1:1 Meeting"
     assert mirror.external_status == "confirmed"
-    assert mirror.linked_occurrence_id is not None
+    # One-off events are mirrored but not mapped into Agendable meetings.
+    assert mirror.linked_occurrence_id is None
+    series_count = (await db_session.execute(select(MeetingSeries))).scalars().all()
+    assert series_count == []
 
-    linked_occurrence = (
-        await db_session.execute(
-            select(MeetingOccurrence).where(MeetingOccurrence.id == mirror.linked_occurrence_id)
+
+class _FakeRecurringDetailsClient:
+    def __init__(self, batch: ExternalCalendarSyncBatch) -> None:
+        self.batch = batch
+
+    async def list_events(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        sync_token: str | None,
+    ) -> ExternalCalendarSyncBatch:
+        assert access_token == "access-token"
+        assert refresh_token == "refresh-token"
+        assert calendar_id == "primary"
+        assert sync_token is None
+        return self.batch
+
+    async def get_recurring_event_details(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None:
+        assert access_token == "access-token"
+        assert refresh_token == "refresh-token"
+        assert calendar_id == "primary"
+        assert recurring_event_id == "master-1"
+        # Weekly on Wed, starting at 18:00 UTC.
+        return ExternalRecurringEventDetails(
+            event_id="master-1",
+            recurrence_rrule="FREQ=WEEKLY;INTERVAL=1;BYDAY=WE",
+            recurrence_dtstart=datetime(2026, 3, 4, 18, 0, tzinfo=UTC),
+            recurrence_timezone="UTC",
         )
-    ).scalar_one()
-    assert linked_occurrence.scheduled_at.replace(tzinfo=UTC) == datetime(
-        2026,
-        3,
-        4,
-        18,
-        0,
-        tzinfo=UTC,
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_recurring_event_backlink should not be called in this test")
+
+    async def upsert_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_event_backlink should not be called in this test")
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_sync_service_maps_recurring_instances_with_rrule(
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email=f"sync-recurring-{uuid.uuid4()}@example.com",
+        first_name="Sync",
+        last_name="Recurring",
+        display_name="Sync Recurring",
+        timezone="UTC",
+        password_hash=None,
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    connection = ExternalCalendarConnection(
+        user_id=user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+        access_token="access-token",
+        refresh_token="refresh-token",
+    )
+    db_session.add(connection)
+    await db_session.commit()
+
+    evt1 = ExternalCalendarEvent(
+        event_id="evt-1",
+        recurring_event_id="master-1",
+        status="confirmed",
+        etag="etag-1",
+        summary="Team Sync",
+        start_at=datetime(2026, 3, 4, 18, 0, tzinfo=UTC),
+        end_at=datetime(2026, 3, 4, 18, 30, tzinfo=UTC),
+        is_all_day=False,
+        external_updated_at=datetime(2026, 3, 4, 17, 0, tzinfo=UTC),
+    )
+    evt2 = ExternalCalendarEvent(
+        event_id="evt-2",
+        recurring_event_id="master-1",
+        status="confirmed",
+        etag="etag-2",
+        summary="Team Sync",
+        start_at=datetime(2026, 3, 11, 18, 0, tzinfo=UTC),
+        end_at=datetime(2026, 3, 11, 18, 30, tzinfo=UTC),
+        is_all_day=False,
+        external_updated_at=datetime(2026, 3, 11, 17, 0, tzinfo=UTC),
+    )
+    batch = ExternalCalendarSyncBatch(events=[evt1, evt2], next_sync_token="sync-token-1")
+
+    service = GoogleCalendarSyncService(
+        connection_repo=ExternalCalendarConnectionRepository(db_session),
+        event_mirror_repo=ExternalCalendarEventMirrorRepository(db_session),
+        calendar_client=_FakeRecurringDetailsClient(batch),
+        event_mapper=CalendarEventMappingService(session=db_session),
     )
 
-    series = (
-        await db_session.execute(
-            select(MeetingSeries).where(MeetingSeries.id == linked_occurrence.series_id)
+    synced_count = await service.sync_connection(connection)
+    assert synced_count == 2
+
+    mirrors = (
+        (
+            await db_session.execute(
+                select(ExternalCalendarEventMirror).where(
+                    ExternalCalendarEventMirror.connection_id == connection.id
+                )
+            )
         )
-    ).scalar_one()
-    assert series.owner_user_id == user.id
-    assert series.title == "1:1 Meeting"
+        .scalars()
+        .all()
+    )
+    assert len(mirrors) == 2
+    assert all(m.linked_occurrence_id is not None for m in mirrors)
+
+    occurrences = (await db_session.execute(select(MeetingOccurrence))).scalars().all()
+    assert len(occurrences) == 2
+    series_ids = {occ.series_id for occ in occurrences}
+    assert len(series_ids) == 1
+
+    series = await db_session.get(MeetingSeries, next(iter(series_ids)))
+    assert series is not None
+    assert series.title == "Team Sync"
+    assert series.recurrence_rrule == "FREQ=WEEKLY;INTERVAL=1;BYDAY=WE"
+    assert series.recurrence_timezone == "UTC"
 
 
 @pytest.mark.asyncio
@@ -190,3 +389,199 @@ async def test_google_calendar_sync_service_ignores_stale_bootstrap_sync_token_w
     refreshed_connection = await db_session.get(ExternalCalendarConnection, connection.id)
     assert refreshed_connection is not None
     assert refreshed_connection.sync_token == "sync-token-after-recovery"
+
+
+@pytest.mark.asyncio
+async def test_calendar_event_mapping_service_rolls_tasks_forward_on_cancelled_instance(
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email=f"sync-cancelled-{uuid.uuid4()}@example.com",
+        first_name="Sync",
+        last_name="Cancelled",
+        display_name="Sync Cancelled",
+        timezone="UTC",
+        password_hash=None,
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    connection = ExternalCalendarConnection(
+        user_id=user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+        access_token="access-token",
+        refresh_token="refresh-token",
+    )
+    db_session.add(connection)
+    await db_session.flush()
+
+    series = MeetingSeries(
+        owner_user_id=user.id,
+        title="Team Sync",
+        default_interval_days=7,
+        reminder_minutes_before=60,
+    )
+    db_session.add(series)
+    await db_session.flush()
+
+    occ1 = MeetingOccurrence(
+        series_id=series.id,
+        scheduled_at=datetime(2026, 3, 4, 18, 0, tzinfo=UTC),
+        notes="",
+        is_completed=False,
+    )
+    occ2 = MeetingOccurrence(
+        series_id=series.id,
+        scheduled_at=datetime(2026, 3, 11, 18, 0, tzinfo=UTC),
+        notes="",
+        is_completed=False,
+    )
+    db_session.add_all([occ1, occ2])
+    await db_session.flush()
+
+    task = Task(
+        occurrence_id=occ1.id,
+        assigned_user_id=user.id,
+        title="Prep updates",
+        description=None,
+        due_at=occ1.scheduled_at,
+        is_done=False,
+    )
+    db_session.add(task)
+    await db_session.flush()
+
+    mirror = ExternalCalendarEventMirror(
+        connection_id=connection.id,
+        external_event_id="evt-1",
+        external_recurring_event_id="master-1",
+        external_status="cancelled",
+        etag="etag-1",
+        summary="Team Sync",
+        start_at=occ1.scheduled_at,
+        end_at=occ1.scheduled_at,
+        is_all_day=False,
+        external_updated_at=datetime(2026, 3, 4, 17, 0, tzinfo=UTC),
+        linked_occurrence_id=occ1.id,
+    )
+    db_session.add(mirror)
+    await db_session.flush()
+
+    mapped = await CalendarEventMappingService(session=db_session).map_mirrors(
+        connection=connection,
+        mirrors=[mirror],
+        recurring_event_details_by_id=None,
+    )
+    assert mapped == 1
+
+    refreshed_occ1 = await db_session.get(MeetingOccurrence, occ1.id)
+    assert refreshed_occ1 is not None
+    assert refreshed_occ1.is_completed is True
+
+    refreshed_task = await db_session.get(Task, task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.occurrence_id == occ2.id
+    assert refreshed_task.due_at == occ2.scheduled_at
+
+
+@pytest.mark.asyncio
+async def test_calendar_event_mapping_service_creates_next_occurrence_on_cancelled_instance_when_missing(
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email=f"sync-cancelled-create-next-{uuid.uuid4()}@example.com",
+        first_name="Sync",
+        last_name="Cancelled",
+        display_name="Sync Cancelled",
+        timezone="UTC",
+        password_hash=None,
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    connection = ExternalCalendarConnection(
+        user_id=user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+        access_token="access-token",
+        refresh_token="refresh-token",
+    )
+    db_session.add(connection)
+    await db_session.flush()
+
+    occ1_at = datetime(2026, 3, 4, 18, 0, tzinfo=UTC)
+    expected_occ2_at = datetime(2026, 3, 11, 18, 0, tzinfo=UTC)
+
+    series = MeetingSeries(
+        owner_user_id=user.id,
+        title="Team Sync",
+        default_interval_days=7,
+        reminder_minutes_before=60,
+        recurrence_rrule="FREQ=WEEKLY;INTERVAL=1;BYDAY=WE",
+        recurrence_dtstart=occ1_at,
+        recurrence_timezone="UTC",
+    )
+    db_session.add(series)
+    await db_session.flush()
+
+    occ1 = MeetingOccurrence(
+        series_id=series.id,
+        scheduled_at=occ1_at,
+        notes="",
+        is_completed=False,
+    )
+    db_session.add(occ1)
+    await db_session.flush()
+
+    task = Task(
+        occurrence_id=occ1.id,
+        assigned_user_id=user.id,
+        title="Prep updates",
+        description=None,
+        due_at=occ1.scheduled_at,
+        is_done=False,
+    )
+    db_session.add(task)
+    await db_session.flush()
+
+    mirror = ExternalCalendarEventMirror(
+        connection_id=connection.id,
+        external_event_id="evt-1",
+        external_recurring_event_id="master-1",
+        external_status="cancelled",
+        etag="etag-1",
+        summary="Team Sync",
+        start_at=occ1.scheduled_at,
+        end_at=occ1.scheduled_at,
+        is_all_day=False,
+        external_updated_at=datetime(2026, 3, 4, 17, 0, tzinfo=UTC),
+        linked_occurrence_id=occ1.id,
+    )
+    db_session.add(mirror)
+    await db_session.flush()
+
+    mapped = await CalendarEventMappingService(session=db_session).map_mirrors(
+        connection=connection,
+        mirrors=[mirror],
+        recurring_event_details_by_id=None,
+    )
+    assert mapped == 1
+
+    occ2 = (
+        (
+            await db_session.execute(
+                select(MeetingOccurrence).where(
+                    MeetingOccurrence.series_id == series.id,
+                    MeetingOccurrence.scheduled_at == expected_occ2_at,
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert occ2.is_completed is False
+
+    refreshed_task = await db_session.get(Task, task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.occurrence_id == occ2.id
+    assert refreshed_task.due_at == expected_occ2_at

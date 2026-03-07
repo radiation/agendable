@@ -61,7 +61,7 @@
         <p class="field-error"><strong>{{ identity_error }}</strong></p>
         {% endif %}
 
-        {% if oidc_enabled %}
+        {% if any_oidc_enabled %}
         <form method="post" action="/profile/identities/link/start" class="form-grid">
             {% if user.password_hash %}
             <label>

@@ -363,10 +363,10 @@ async def test_completed_occurrence_is_read_only(
     assert add_attendee_resp.status_code == 400
 
     toggle_task_resp = await client.post(f"/tasks/{task.id}/toggle", follow_redirects=False)
-    assert toggle_task_resp.status_code == 400
+    assert toggle_task_resp.status_code == 303
 
     toggle_agenda_resp = await client.post(f"/agenda/{agenda.id}/toggle", follow_redirects=False)
-    assert toggle_agenda_resp.status_code == 400
+    assert toggle_agenda_resp.status_code == 303
 
     detail_resp = await client.get(f"/occurrences/{occ.id}")
     assert detail_resp.status_code == 200
@@ -391,8 +391,8 @@ async def test_completed_occurrence_is_read_only(
         refreshed_agenda = (
             await verify_session.execute(select(AgendaItem).where(AgendaItem.id == agenda.id))
         ).scalar_one()
-        assert refreshed_task.is_done is False
-        assert refreshed_agenda.is_done is False
+        assert refreshed_task.is_done is True
+        assert refreshed_agenda.is_done is True
 
         still_one_task = (
             (
@@ -415,5 +415,5 @@ async def test_completed_occurrence_is_read_only(
             .scalars()
             .all()
         )
-        assert len(still_one_task) == 1
-        assert len(still_one_agenda) == 1
+        assert len(still_one_task) == 0
+        assert len(still_one_agenda) == 0

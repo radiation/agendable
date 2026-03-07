@@ -21,6 +21,7 @@ async def test_login_page_hides_oidc_when_disabled(
 
     resp = await client.get("/login")
     assert resp.status_code == 200
+    assert "Sign in with Google" not in resp.text
     assert "Sign in with SSO" not in resp.text
 
 

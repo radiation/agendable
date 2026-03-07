@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     # For local development
     auto_create_db: bool = False
 
+    # Runtime environment (used for gating non-production-only features).
+    environment: Literal["local", "development", "staging", "production", "test"] = "local"
+
+    # Public base URL (used for generating absolute links in external systems)
+    # Example: "https://app.agendable.com"
+    public_base_url: str | None = None
+
     # Session cookie auth (MVP). In production, override via env.
     session_secret: SecretStr = SecretStr("dev-insecure-change-me")
     session_cookie_name: str = "agendable_session"
@@ -73,6 +80,15 @@ class Settings(BaseSettings):
     # Set to empty string to omit prompt from authorize requests.
     oidc_auth_prompt: str | None = "select_account"
     oidc_scope: str = "openid email profile"
+
+    # Optional: a second OIDC provider (Keycloak) for SSO.
+    # When configured, this is separate from the primary (currently Google) OIDC flow.
+    keycloak_oidc_client_id: str | None = None
+    keycloak_oidc_client_secret: SecretStr | None = None
+    keycloak_oidc_metadata_url: str | None = None
+    keycloak_oidc_scope: str = "openid email profile"
+    # Allow Keycloak SSO outside production by default; override to false to hide it locally.
+    keycloak_oidc_allow_non_production: bool = True
     # If set, only allow users with emails in this domain (e.g. "example.com").
     allowed_email_domain: str | None = None
 
@@ -85,6 +101,15 @@ class Settings(BaseSettings):
     google_calendar_api_base_url: str = "https://www.googleapis.com/calendar/v3"
     google_calendar_initial_sync_days_back: int = Field(default=90, ge=1)
     google_calendar_sync_worker_poll_seconds: int = Field(default=60, ge=1)
+
+    # Optional: write a backlink + stable key back to Google Calendar invites.
+    # Requires a write scope such as: https://www.googleapis.com/auth/calendar.events
+    google_calendar_backlink_enabled: bool = False
+    # Which event(s) to patch when backlink is enabled:
+    # - "series": recurring master event only
+    # - "occurrence": each mapped instance event
+    # - "both": master + instances
+    google_calendar_backlink_target: Literal["series", "occurrence", "both"] = "series"
 
 
 def get_settings() -> Settings:

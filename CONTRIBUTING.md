@@ -46,6 +46,7 @@ Run the same checks CI enforces:
 - `uv run ruff check .`
 - `uv run mypy --strict src`
 - `uv run pytest --cov=agendable --cov-report=term-missing`
+- `uv run xenon --max-absolute B --max-modules B --max-average A src/agendable`
 
 If your changes touch auth/OIDC, include the relevant env-var/config notes in your PR description.
 

@@ -73,6 +73,7 @@ async def provision_user_for_oidc(
 async def resolve_oidc_link_resolution(
     session: AsyncSession,
     *,
+    provider: str,
     link_user: User,
     sub: str,
     email: str,
@@ -85,7 +86,7 @@ async def resolve_oidc_link_resolution(
         )
 
     ext_repo = ExternalIdentityRepository(session)
-    ext = await ext_repo.get_by_provider_subject("oidc", sub)
+    ext = await ext_repo.get_by_provider_subject(provider, sub)
     if ext is not None and ext.user_id != link_user.id:
         return OidcLinkResolution(
             user=link_user,
@@ -109,6 +110,7 @@ async def resolve_oidc_link_resolution(
 async def resolve_oidc_login_resolution(
     session: AsyncSession,
     *,
+    provider: str,
     sub: str,
     email: str,
     userinfo: Mapping[str, object],
@@ -117,7 +119,7 @@ async def resolve_oidc_login_resolution(
     ext_repo = ExternalIdentityRepository(session)
     users = UserRepository(session)
 
-    ext = await ext_repo.get_by_provider_subject("oidc", sub)
+    ext = await ext_repo.get_by_provider_subject(provider, sub)
     if ext is not None:
         user = await users.get_by_id(ext.user_id)
         if user is None:

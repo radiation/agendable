@@ -12,6 +12,8 @@ from agendable.db.models import (
     MeetingOccurrence,
     MeetingSeries,
 )
+from agendable.services.google_calendar_sync_service import ExternalRecurringEventDetails
+from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
 
 
 class CalendarEventMappingService:
@@ -23,10 +25,16 @@ class CalendarEventMappingService:
         *,
         connection: ExternalCalendarConnection,
         mirrors: list[ExternalCalendarEventMirror],
+        recurring_event_details_by_id: dict[str, ExternalRecurringEventDetails] | None = None,
     ) -> int:
+        details_by_id = recurring_event_details_by_id or {}
         mapped_count = 0
         for mirror in mirrors:
-            mapped_count += await self._map_single_mirror(connection=connection, mirror=mirror)
+            mapped_count += await self._map_single_mirror(
+                connection=connection,
+                mirror=mirror,
+                recurring_event_details_by_id=details_by_id,
+            )
         await self.session.flush()
         return mapped_count
 
@@ -35,16 +43,27 @@ class CalendarEventMappingService:
         *,
         connection: ExternalCalendarConnection,
         mirror: ExternalCalendarEventMirror,
+        recurring_event_details_by_id: dict[str, ExternalRecurringEventDetails],
     ) -> int:
         linked_occurrence = await self._get_linked_occurrence(mirror)
 
         if mirror.external_status == "cancelled":
             if linked_occurrence is None:
                 return 0
-            linked_occurrence.is_completed = True
+            await complete_occurrence_and_roll_forward(
+                self.session,
+                occurrence=linked_occurrence,
+                commit=False,
+                create_next_if_missing=True,
+            )
             return 1
 
         if mirror.start_at is None or mirror.is_all_day:
+            return 0
+
+        # Prevent importing one-off calendar meetings as weekly Agendable series.
+        # We only map recurring events (Google instances will have `recurringEventId`).
+        if mirror.external_recurring_event_id is None and linked_occurrence is None:
             return 0
 
         normalized_start = mirror.start_at.astimezone(UTC)
@@ -52,6 +71,7 @@ class CalendarEventMappingService:
             connection=connection,
             mirror=mirror,
             linked_occurrence=linked_occurrence,
+            recurring_event_details_by_id=recurring_event_details_by_id,
         )
 
         occurrence = linked_occurrence
@@ -91,11 +111,15 @@ class CalendarEventMappingService:
         connection: ExternalCalendarConnection,
         mirror: ExternalCalendarEventMirror,
         linked_occurrence: MeetingOccurrence | None,
+        recurring_event_details_by_id: dict[str, ExternalRecurringEventDetails],
     ) -> MeetingSeries:
         if linked_occurrence is not None:
             existing_series = await self.session.get(MeetingSeries, linked_occurrence.series_id)
             if existing_series is not None:
                 self._apply_series_title(existing_series, mirror)
+                self._apply_series_recurrence(
+                    existing_series, mirror, recurring_event_details_by_id
+                )
                 return existing_series
 
         group_key = self._series_group_key(mirror)
@@ -106,6 +130,7 @@ class CalendarEventMappingService:
         )
         if existing_series is not None:
             self._apply_series_title(existing_series, mirror)
+            self._apply_series_recurrence(existing_series, mirror, recurring_event_details_by_id)
             return existing_series
 
         series = MeetingSeries(
@@ -114,9 +139,30 @@ class CalendarEventMappingService:
             default_interval_days=7,
             reminder_minutes_before=60,
         )
+        self._apply_series_recurrence(series, mirror, recurring_event_details_by_id)
         self.session.add(series)
         await self.session.flush()
         return series
+
+    def _apply_series_recurrence(
+        self,
+        series: MeetingSeries,
+        mirror: ExternalCalendarEventMirror,
+        recurring_event_details_by_id: dict[str, ExternalRecurringEventDetails],
+    ) -> None:
+        recurring_event_id = mirror.external_recurring_event_id
+        if recurring_event_id is None:
+            return
+
+        details = recurring_event_details_by_id.get(recurring_event_id)
+        if details is None:
+            return
+
+        # Only set when we have a usable RRULE.
+        if details.recurrence_rrule:
+            series.recurrence_rrule = details.recurrence_rrule
+            series.recurrence_dtstart = details.recurrence_dtstart
+            series.recurrence_timezone = details.recurrence_timezone
 
     async def _find_series_for_group_key(
         self,

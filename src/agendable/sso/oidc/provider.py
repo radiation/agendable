@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from authlib.integrations.starlette_client import OAuth
 
-from agendable.settings import get_settings
+from agendable.settings import Settings, get_settings
 
 
 @dataclass(frozen=True)
@@ -67,40 +67,56 @@ def keycloak_oidc_enabled() -> bool:
     return settings.environment == "production" or settings.keycloak_oidc_allow_non_production
 
 
+def _scope_value(*, scope: str) -> str:
+    return " ".join([part for part in scope.split() if part])
+
+
+def _google_oidc_scope_value(settings: Settings) -> str:
+    scope_parts = [part for part in settings.oidc_scope.split() if part]
+    if settings.google_calendar_sync_enabled:
+        additional_scope = settings.google_calendar_oidc_additional_scope.strip()
+        if additional_scope and additional_scope not in scope_parts:
+            scope_parts.append(additional_scope)
+    return " ".join(scope_parts)
+
+
+def _register_oidc_client(
+    oauth: OAuth,
+    *,
+    name: str,
+    cfg: OidcConfig,
+    scope_value: str,
+) -> None:
+    oauth.register(
+        name=name,
+        client_id=cfg.client_id,
+        client_secret=cfg.client_secret,
+        server_metadata_url=cfg.metadata_url,
+        client_kwargs={"scope": scope_value},
+    )
+
+
 def build_oauth() -> OAuth:
     oauth = OAuth()
-    cfg = get_oidc_config()
-    keycloak_cfg = get_keycloak_oidc_config()
     settings = get_settings()
 
-    if cfg is None and keycloak_cfg is None:
-        return oauth
-
+    cfg = get_oidc_config()
     if cfg is not None:
-        scope_parts = [part for part in settings.oidc_scope.split() if part]
-        if settings.google_calendar_sync_enabled:
-            additional_scope = settings.google_calendar_oidc_additional_scope.strip()
-            if additional_scope and additional_scope not in scope_parts:
-                scope_parts.append(additional_scope)
-        scope_value = " ".join(scope_parts)
-
-        oauth.register(
+        _register_oidc_client(
+            oauth,
             name="oidc",
-            client_id=cfg.client_id,
-            client_secret=cfg.client_secret,
-            server_metadata_url=cfg.metadata_url,
-            client_kwargs={"scope": scope_value},
+            cfg=cfg,
+            scope_value=_google_oidc_scope_value(settings),
         )
 
-    if keycloak_cfg is not None:
-        keycloak_scope_value = " ".join(
-            [part for part in settings.keycloak_oidc_scope.split() if part]
-        )
-        oauth.register(
+    keycloak_cfg = get_keycloak_oidc_config()
+    if keycloak_cfg is not None and (
+        settings.environment == "production" or settings.keycloak_oidc_allow_non_production
+    ):
+        _register_oidc_client(
+            oauth,
             name="oidc_keycloak",
-            client_id=keycloak_cfg.client_id,
-            client_secret=keycloak_cfg.client_secret,
-            server_metadata_url=keycloak_cfg.metadata_url,
-            client_kwargs={"scope": keycloak_scope_value},
+            cfg=keycloak_cfg,
+            scope_value=_scope_value(scope=settings.keycloak_oidc_scope),
         )
     return oauth

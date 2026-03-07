@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from agendable.db.models import (
     CalendarProvider,
@@ -19,6 +20,8 @@ from agendable.db.repos import (
     ExternalCalendarEventMirrorRepository,
 )
 from agendable.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 _GOOGLE_CALENDAR_WRITE_SCOPES = frozenset(
     {
@@ -131,6 +134,14 @@ class GoogleCalendarSyncService:
         self.settings = settings
 
     async def sync_connection(self, connection: ExternalCalendarConnection) -> int:
+        lock_acquired = await self._try_acquire_connection_sync_lock(connection)
+        if not lock_acquired:
+            logger.info(
+                "google calendar sync skipped: connection lock not acquired connection_id=%s",
+                connection.id,
+            )
+            return 0
+
         access_token = self._require_access_token(connection)
         sync_token_for_request = await self._resolve_sync_token_for_request(connection)
 
@@ -149,6 +160,36 @@ class GoogleCalendarSyncService:
         self._touch_successful_sync(connection, next_sync_token=batch.next_sync_token)
         await self.connection_repo.commit()
         return len(batch.events)
+
+    async def _try_acquire_connection_sync_lock(
+        self,
+        connection: ExternalCalendarConnection,
+    ) -> bool:
+        """Acquire a best-effort per-connection sync lock.
+
+        Prevents overlapping syncs (e.g. worker loop + web-trigger) from doing duplicate work.
+
+        Uses a Postgres advisory *transaction* lock when running on Postgres.
+        For other dialects (e.g. SQLite in tests), this is a no-op and always returns True.
+        """
+
+        session = self.event_mirror_repo.session
+        try:
+            bind = session.get_bind()
+        except Exception:
+            return True
+
+        if getattr(getattr(bind, "dialect", None), "name", None) != "postgresql":
+            return True
+
+        # Use a signed 63-bit integer key derived from the UUID.
+        key = int(connection.id.int % (2**63))
+        result = await session.execute(
+            text("SELECT pg_try_advisory_xact_lock(:key)"),
+            {"key": key},
+        )
+        acquired = result.scalar_one()
+        return bool(acquired)
 
     def _require_access_token(self, connection: ExternalCalendarConnection) -> str:
         if not connection.access_token:
@@ -397,16 +438,10 @@ class GoogleCalendarSyncService:
         connection: ExternalCalendarConnection,
         event: ExternalCalendarEvent,
     ) -> ExternalCalendarEventMirror:
-        existing = await self.event_mirror_repo.get_for_connection_event(
+        existing = await self.event_mirror_repo.get_or_create_for_connection_event(
             connection_id=connection.id,
             external_event_id=event.event_id,
         )
-        if existing is None:
-            existing = ExternalCalendarEventMirror(
-                connection_id=connection.id,
-                external_event_id=event.event_id,
-            )
-            await self.event_mirror_repo.add(existing)
 
         existing.external_recurring_event_id = event.recurring_event_id
         existing.external_status = event.status

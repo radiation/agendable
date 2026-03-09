@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+import httpx
 from sqlalchemy import select, text
 
 from agendable.db.models import (
@@ -22,6 +23,8 @@ from agendable.db.repos import (
 from agendable.settings import Settings
 
 logger = logging.getLogger(__name__)
+
+_GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 _GOOGLE_CALENDAR_WRITE_SCOPES = frozenset(
     {
@@ -142,15 +145,30 @@ class GoogleCalendarSyncService:
             )
             return 0
 
+        await self._maybe_refresh_google_access_token(connection)
         access_token = self._require_access_token(connection)
         sync_token_for_request = await self._resolve_sync_token_for_request(connection)
 
-        batch = await self.calendar_client.list_events(
-            access_token=access_token,
-            refresh_token=connection.refresh_token,
-            calendar_id=connection.external_calendar_id,
-            sync_token=sync_token_for_request,
-        )
+        try:
+            batch = await self.calendar_client.list_events(
+                access_token=access_token,
+                refresh_token=connection.refresh_token,
+                calendar_id=connection.external_calendar_id,
+                sync_token=sync_token_for_request,
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 401 and await self._refresh_google_access_token(
+                connection
+            ):
+                access_token = self._require_access_token(connection)
+                batch = await self.calendar_client.list_events(
+                    access_token=access_token,
+                    refresh_token=connection.refresh_token,
+                    calendar_id=connection.external_calendar_id,
+                    sync_token=sync_token_for_request,
+                )
+            else:
+                raise
 
         touched_mirrors = await self._upsert_mirror_events(
             connection=connection, events=batch.events
@@ -195,6 +213,69 @@ class GoogleCalendarSyncService:
         if not connection.access_token:
             raise ValueError("Calendar connection is missing an access token")
         return connection.access_token
+
+    async def _maybe_refresh_google_access_token(
+        self, connection: ExternalCalendarConnection
+    ) -> None:
+        expires_at = connection.access_token_expires_at
+        if expires_at is None:
+            return
+
+        now = datetime.now(UTC)
+        # Refresh a little early to avoid races.
+        if expires_at > now + timedelta(seconds=60):
+            return
+
+        await self._refresh_google_access_token(connection)
+
+    async def _refresh_google_access_token(self, connection: ExternalCalendarConnection) -> bool:
+        """Refresh the Google access token in-place.
+
+        Returns True when a new access token was obtained and applied.
+        """
+
+        refresh_token = connection.refresh_token
+        if not refresh_token:
+            return False
+
+        settings = self.settings
+        if (
+            settings is None
+            or settings.oidc_client_id is None
+            or settings.oidc_client_secret is None
+        ):
+            return False
+
+        data = {
+            "client_id": settings.oidc_client_id,
+            "client_secret": settings.oidc_client_secret.get_secret_value(),
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(_GOOGLE_OAUTH_TOKEN_URL, data=data)
+            if response.status_code >= 400:
+                return False
+            payload: dict[str, object] = response.json()
+
+        access_token = payload.get("access_token")
+        if not isinstance(access_token, str) or not access_token.strip():
+            return False
+
+        connection.access_token = access_token.strip()
+
+        # Google usually does not rotate refresh tokens on refresh, but keep it if provided.
+        new_refresh = payload.get("refresh_token")
+        if isinstance(new_refresh, str) and new_refresh.strip():
+            connection.refresh_token = new_refresh.strip()
+
+        expires_in = payload.get("expires_in")
+        if isinstance(expires_in, int | float):
+            connection.access_token_expires_at = datetime.now(UTC).replace(
+                microsecond=0
+            ) + timedelta(seconds=float(expires_in))
+        return True
 
     async def _resolve_sync_token_for_request(
         self, connection: ExternalCalendarConnection
@@ -429,7 +510,26 @@ class GoogleCalendarSyncService:
             provider=CalendarProvider.google,
         )
         for connection in connections:
-            synced_event_count += await self.sync_connection(connection)
+            try:
+                synced_event_count += await self.sync_connection(connection)
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                connection.last_sync_error_code = f"http_{status}"
+                connection.last_sync_error_at = datetime.now(UTC)
+                await self.connection_repo.commit()
+                logger.warning(
+                    "google calendar sync failed for connection_id=%s status=%s",
+                    connection.id,
+                    status,
+                )
+            except Exception:
+                connection.last_sync_error_code = "error"
+                connection.last_sync_error_at = datetime.now(UTC)
+                await self.connection_repo.commit()
+                logger.exception(
+                    "google calendar sync failed for connection_id=%s",
+                    connection.id,
+                )
         return synced_event_count
 
     async def _upsert_mirror_event(

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +29,7 @@ from agendable.services.google_calendar_sync_service import (
     ExternalRecurringEventDetails,
     GoogleCalendarSyncService,
 )
+from agendable.settings import Settings
 
 
 class _FakeGoogleCalendarClient:
@@ -132,6 +135,59 @@ class _FakeBootstrapRecoveryClient:
         raise AssertionError("upsert_event_backlink should not be called in this test")
 
 
+class _FakeRefreshAwareClient:
+    def __init__(self, batch: ExternalCalendarSyncBatch) -> None:
+        self.batch = batch
+
+    async def list_events(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        sync_token: str | None,
+    ) -> ExternalCalendarSyncBatch:
+        assert access_token == "new-access-token"
+        assert refresh_token == "refresh-token"
+        assert calendar_id == "primary"
+        assert sync_token is None
+        return self.batch
+
+    async def get_recurring_event_details(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None:
+        raise AssertionError("get_recurring_event_details should not be called in this test")
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_recurring_event_backlink should not be called in this test")
+
+    async def upsert_event_backlink(
+        self,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_event_backlink should not be called in this test")
+
+
 @pytest.mark.asyncio
 async def test_google_calendar_sync_service_upserts_mirror_and_sync_token(
     db_session: AsyncSession,
@@ -199,6 +255,97 @@ async def test_google_calendar_sync_service_upserts_mirror_and_sync_token(
     assert mirror.linked_occurrence_id is None
     series_count = (await db_session.execute(select(MeetingSeries))).scalars().all()
     assert series_count == []
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_sync_service_refreshes_expired_access_token(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        email=f"sync-refresh-{uuid.uuid4()}@example.com",
+        first_name="Sync",
+        last_name="Refresh",
+        display_name="Sync Refresh",
+        timezone="UTC",
+        password_hash=None,
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    connection = ExternalCalendarConnection(
+        user_id=user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+        access_token="old-access-token",
+        refresh_token="refresh-token",
+        access_token_expires_at=datetime.now(UTC) - timedelta(seconds=10),
+    )
+    db_session.add(connection)
+    await db_session.commit()
+
+    event = ExternalCalendarEvent(
+        event_id="evt-1",
+        recurring_event_id=None,
+        status="confirmed",
+        etag="etag-1",
+        summary="1:1 Meeting",
+        start_at=datetime(2026, 3, 4, 18, 0, tzinfo=UTC),
+        end_at=datetime(2026, 3, 4, 18, 30, tzinfo=UTC),
+        is_all_day=False,
+        external_updated_at=datetime(2026, 3, 4, 17, 0, tzinfo=UTC),
+    )
+    batch = ExternalCalendarSyncBatch(events=[event], next_sync_token="sync-token-1")
+
+    class _FakeTokenResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {"access_token": "new-access-token", "expires_in": 3600}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: object,
+            tb: object,
+        ) -> None:
+            return None
+
+        async def post(self, url: str, data: dict[str, str]) -> _FakeTokenResponse:
+            assert "oauth2.googleapis.com" in url
+            assert data["grant_type"] == "refresh_token"
+            assert data["refresh_token"] == "refresh-token"
+            return _FakeTokenResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+
+    service = GoogleCalendarSyncService(
+        connection_repo=ExternalCalendarConnectionRepository(db_session),
+        event_mirror_repo=ExternalCalendarEventMirrorRepository(db_session),
+        calendar_client=_FakeRefreshAwareClient(batch),
+        event_mapper=CalendarEventMappingService(session=db_session),
+        settings=Settings(
+            google_calendar_sync_enabled=True,
+            oidc_client_id="client-id",
+            oidc_client_secret=SecretStr("client-secret"),
+            oidc_metadata_url="https://example.com/.well-known/openid-configuration",
+        ),
+    )
+
+    synced_count = await service.sync_connection(connection)
+    assert synced_count == 1
+
+    refreshed = await db_session.get(ExternalCalendarConnection, connection.id)
+    assert refreshed is not None
+    assert refreshed.access_token == "new-access-token"
+    assert refreshed.access_token_expires_at is not None
 
 
 class _FakeRecurringDetailsClient:

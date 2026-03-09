@@ -4,7 +4,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 from sqlalchemy import select, text
@@ -157,15 +157,29 @@ class GoogleCalendarSyncService:
                 sync_token=sync_token_for_request,
             )
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 401 and await self._refresh_google_access_token(
-                connection
-            ):
+            status = exc.response.status_code
+
+            # 401 typically indicates an expired/revoked access token.
+            if status == 401 and await self._refresh_google_access_token(connection):
                 access_token = self._require_access_token(connection)
                 batch = await self.calendar_client.list_events(
                     access_token=access_token,
                     refresh_token=connection.refresh_token,
                     calendar_id=connection.external_calendar_id,
                     sync_token=sync_token_for_request,
+                )
+            # 410 indicates the sync token is no longer valid; clear it and do a bootstrap sync.
+            elif status == 410 and sync_token_for_request is not None:
+                logger.info(
+                    "google calendar sync token expired; resetting connection_id=%s",
+                    connection.id,
+                )
+                connection.sync_token = None
+                batch = await self.calendar_client.list_events(
+                    access_token=access_token,
+                    refresh_token=connection.refresh_token,
+                    calendar_id=connection.external_calendar_id,
+                    sync_token=None,
                 )
             else:
                 raise
@@ -256,8 +270,26 @@ class GoogleCalendarSyncService:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(_GOOGLE_OAUTH_TOKEN_URL, data=data)
             if response.status_code >= 400:
+                try:
+                    error_payload: object = response.json()
+                except Exception:
+                    error_payload = None
+                logger.warning(
+                    "google oauth token refresh failed connection_id=%s status=%s payload_type=%s",
+                    connection.id,
+                    response.status_code,
+                    type(error_payload).__name__ if error_payload is not None else None,
+                )
                 return False
-            payload: dict[str, object] = response.json()
+            try:
+                raw_payload: object = response.json()
+            except Exception:
+                return False
+
+            if not isinstance(raw_payload, dict):
+                return False
+
+            payload = cast(dict[str, Any], raw_payload)
 
         access_token = payload.get("access_token")
         if not isinstance(access_token, str) or not access_token.strip():
@@ -514,7 +546,10 @@ class GoogleCalendarSyncService:
                 synced_event_count += await self.sync_connection(connection)
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
-                connection.last_sync_error_code = f"http_{status}"
+                if status == 401 and not connection.refresh_token:
+                    connection.last_sync_error_code = "needs_reauth"
+                else:
+                    connection.last_sync_error_code = f"http_{status}"
                 connection.last_sync_error_at = datetime.now(UTC)
                 await self.connection_repo.commit()
                 logger.warning(

@@ -12,7 +12,7 @@ from agendable.db.models import (
     MeetingOccurrence,
     MeetingSeries,
 )
-from agendable.services.google_calendar_sync_service import ExternalRecurringEventDetails
+from agendable.services.external_calendar_api import ExternalRecurringEventDetails
 from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
 
 

@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
-from agendable.services.google_calendar_sync_service import (
+from agendable.services.external_calendar_api import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
     ExternalRecurringEventDetails,

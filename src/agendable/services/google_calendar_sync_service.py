@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 
@@ -20,6 +19,12 @@ from agendable.db.repos import (
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
 )
+from agendable.services.external_calendar_api import (
+    ExternalCalendarClient,
+    ExternalCalendarEvent,
+    ExternalCalendarSyncBatch,
+    ExternalRecurringEventDetails,
+)
 from agendable.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -33,81 +38,6 @@ _GOOGLE_CALENDAR_WRITE_SCOPES = frozenset(
         "https://www.googleapis.com/auth/calendar.events.owned",
     }
 )
-
-
-@dataclass(frozen=True)
-class ExternalCalendarEvent:
-    event_id: str
-    recurring_event_id: str | None
-    status: str | None
-    etag: str | None
-    summary: str | None
-    start_at: datetime | None
-    end_at: datetime | None
-    is_all_day: bool
-    external_updated_at: datetime | None
-
-
-@dataclass(frozen=True)
-class ExternalRecurringEventDetails:
-    """Details for a recurring *master* event.
-
-    For Google Calendar, `event_id` here is the recurring master event id
-    referenced by instances via `recurringEventId`.
-    """
-
-    event_id: str
-    recurrence_rrule: str | None
-    recurrence_dtstart: datetime | None
-    recurrence_timezone: str | None
-
-
-@dataclass(frozen=True)
-class ExternalCalendarSyncBatch:
-    events: Sequence[ExternalCalendarEvent]
-    next_sync_token: str | None
-
-
-class GoogleCalendarClient(Protocol):
-    async def list_events(
-        self,
-        *,
-        access_token: str,
-        refresh_token: str | None,
-        calendar_id: str,
-        sync_token: str | None,
-    ) -> ExternalCalendarSyncBatch: ...
-
-    async def get_recurring_event_details(
-        self,
-        *,
-        access_token: str,
-        refresh_token: str | None,
-        calendar_id: str,
-        recurring_event_id: str,
-    ) -> ExternalRecurringEventDetails | None: ...
-
-    async def upsert_recurring_event_backlink(
-        self,
-        *,
-        access_token: str,
-        refresh_token: str | None,
-        calendar_id: str,
-        recurring_event_id: str,
-        agendable_series_id: str,
-        agendable_series_url: str | None,
-    ) -> None: ...
-
-    async def upsert_event_backlink(
-        self,
-        *,
-        access_token: str,
-        refresh_token: str | None,
-        calendar_id: str,
-        event_id: str,
-        agendable_occurrence_id: str,
-        agendable_occurrence_url: str | None,
-    ) -> None: ...
 
 
 class CalendarEventMapper(Protocol):
@@ -126,7 +56,7 @@ class GoogleCalendarSyncService:
         *,
         connection_repo: ExternalCalendarConnectionRepository,
         event_mirror_repo: ExternalCalendarEventMirrorRepository,
-        calendar_client: GoogleCalendarClient,
+        calendar_client: ExternalCalendarClient,
         event_mapper: CalendarEventMapper | None = None,
         settings: Settings | None = None,
     ) -> None:
@@ -148,6 +78,8 @@ class GoogleCalendarSyncService:
         await self._maybe_refresh_google_access_token(connection)
         access_token = self._require_access_token(connection)
         sync_token_for_request = await self._resolve_sync_token_for_request(connection)
+
+        batch: ExternalCalendarSyncBatch
 
         try:
             batch = await self.calendar_client.list_events(
@@ -589,3 +521,12 @@ class GoogleCalendarSyncService:
         existing.last_seen_at = datetime.now(UTC)
         await self.event_mirror_repo.session.flush()
         return existing
+
+
+__all__ = [
+    "ExternalCalendarClient",
+    "ExternalCalendarEvent",
+    "ExternalCalendarSyncBatch",
+    "ExternalRecurringEventDetails",
+    "GoogleCalendarSyncService",
+]

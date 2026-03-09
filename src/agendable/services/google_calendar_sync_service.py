@@ -110,7 +110,7 @@ class GoogleCalendarSyncService:
             # 410 indicates the sync token is no longer valid; clear it and do a bootstrap sync.
             elif status == 410 and sync_token_for_request is not None:
                 logger.info(
-                    "google calendar sync token expired; resetting connection_id=%s",
+                    "google calendar sync cursor expired; resetting connection_id=%s",
                     connection.id,
                 )
                 connection.sync_token = None
@@ -190,45 +190,91 @@ class GoogleCalendarSyncService:
         if not refresh_token:
             return False
 
+        creds = self._google_refresh_client_credentials()
+        if creds is None:
+            return False
+
+        client_id, client_secret = creds
+        data = self._google_refresh_request_data(
+            client_id=client_id,
+            client_secret=client_secret,
+            refresh_token=refresh_token,
+        )
+
+        response = await self._post_google_token_refresh(data)
+        if response.status_code >= 400:
+            self._log_google_auth_update_failed(connection_id=connection.id, response=response)
+            return False
+
+        payload = self._parse_json_dict_response(response)
+        if payload is None:
+            return False
+
+        return self._apply_google_token_refresh_payload(connection, payload)
+
+    def _google_refresh_client_credentials(self) -> tuple[str, str] | None:
         settings = self.settings
         if (
             settings is None
             or settings.oidc_client_id is None
             or settings.oidc_client_secret is None
         ):
-            return False
+            return None
+        return settings.oidc_client_id, settings.oidc_client_secret.get_secret_value()
 
-        data = {
-            "client_id": settings.oidc_client_id,
-            "client_secret": settings.oidc_client_secret.get_secret_value(),
+    def _google_refresh_request_data(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+        refresh_token: str,
+    ) -> dict[str, str]:
+        return {
+            "client_id": client_id,
+            "client_secret": client_secret,
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         }
 
+    async def _post_google_token_refresh(self, data: dict[str, str]) -> httpx.Response:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(_GOOGLE_OAUTH_TOKEN_URL, data=data)
-            if response.status_code >= 400:
-                try:
-                    error_payload: object = response.json()
-                except Exception:
-                    error_payload = None
-                logger.warning(
-                    "google oauth token refresh failed connection_id=%s status=%s payload_type=%s",
-                    connection.id,
-                    response.status_code,
-                    type(error_payload).__name__ if error_payload is not None else None,
-                )
-                return False
-            try:
-                raw_payload: object = response.json()
-            except Exception:
-                return False
+            return await client.post(_GOOGLE_OAUTH_TOKEN_URL, data=data)
 
-            if not isinstance(raw_payload, dict):
-                return False
+    def _parse_json_dict_response(self, response: httpx.Response) -> dict[str, Any] | None:
+        try:
+            raw_payload: object = response.json()
+        except Exception:
+            return None
+        if not isinstance(raw_payload, dict):
+            return None
+        return cast(dict[str, Any], raw_payload)
 
-            payload = cast(dict[str, Any], raw_payload)
+    def _log_google_auth_update_failed(
+        self,
+        *,
+        connection_id: object,
+        response: httpx.Response,
+    ) -> None:
+        payload_type: str | None
+        try:
+            parsed: object = response.json()
+        except Exception:
+            payload_type = None
+        else:
+            payload_type = type(parsed).__name__
 
+        logger.warning(
+            "google auth update failed connection_id=%s status=%s payload_type=%s",
+            connection_id,
+            response.status_code,
+            payload_type,
+        )
+
+    def _apply_google_token_refresh_payload(
+        self,
+        connection: ExternalCalendarConnection,
+        payload: dict[str, Any],
+    ) -> bool:
         access_token = payload.get("access_token")
         if not isinstance(access_token, str) or not access_token.strip():
             return False
@@ -245,6 +291,7 @@ class GoogleCalendarSyncService:
             connection.access_token_expires_at = datetime.now(UTC).replace(
                 microsecond=0
             ) + timedelta(seconds=float(expires_in))
+
         return True
 
     async def _resolve_sync_token_for_request(

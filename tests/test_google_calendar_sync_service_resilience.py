@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -196,7 +197,9 @@ async def test_google_calendar_sync_service_refreshes_expired_access_token(
             return None
 
         async def post(self, url: str, data: dict[str, str]) -> _FakeTokenResponse:
-            assert "oauth2.googleapis.com" in url
+            parsed = urlparse(url)
+            assert parsed.scheme == "https"
+            assert parsed.netloc == "oauth2.googleapis.com"
             assert data["grant_type"] == "refresh_token"
             assert data["refresh_token"] == "refresh-token"
             return _FakeTokenResponse()

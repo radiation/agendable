@@ -20,6 +20,7 @@ from agendable.db.repos import (
     ExternalCalendarEventMirrorRepository,
 )
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
+from agendable.services.external_calendar_api import ExternalCalendarAuth
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
@@ -35,8 +36,7 @@ class _FakeGoogleCalendarClient:
     async def get_recurring_event_details(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
     ) -> ExternalRecurringEventDetails | None:
@@ -45,8 +45,7 @@ class _FakeGoogleCalendarClient:
     async def upsert_recurring_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
         agendable_series_id: str,
@@ -57,8 +56,7 @@ class _FakeGoogleCalendarClient:
     async def upsert_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         event_id: str,
         agendable_occurrence_id: str,
@@ -69,13 +67,12 @@ class _FakeGoogleCalendarClient:
     async def list_events(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch:
-        assert access_token == "access-token"
-        assert refresh_token == "refresh-token"
+        assert auth.access_token == "access-token"
+        assert auth.refresh_token == "refresh-token"
         assert calendar_id == "primary"
         assert sync_token is None
         return self.batch
@@ -88,19 +85,19 @@ class _FakeBootstrapRecoveryClient:
     async def list_events(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch:
         self.received_sync_tokens.append(sync_token)
+        del auth
+        del calendar_id
         return ExternalCalendarSyncBatch(events=[], next_sync_token="sync-token-after-recovery")
 
     async def get_recurring_event_details(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
     ) -> ExternalRecurringEventDetails | None:
@@ -109,8 +106,7 @@ class _FakeBootstrapRecoveryClient:
     async def upsert_recurring_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
         agendable_series_id: str,
@@ -121,8 +117,7 @@ class _FakeBootstrapRecoveryClient:
     async def upsert_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         event_id: str,
         agendable_occurrence_id: str,
@@ -207,13 +202,12 @@ class _FakeRecurringDetailsClient:
     async def list_events(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch:
-        assert access_token == "access-token"
-        assert refresh_token == "refresh-token"
+        assert auth.access_token == "access-token"
+        assert auth.refresh_token == "refresh-token"
         assert calendar_id == "primary"
         assert sync_token is None
         return self.batch
@@ -221,13 +215,12 @@ class _FakeRecurringDetailsClient:
     async def get_recurring_event_details(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
     ) -> ExternalRecurringEventDetails | None:
-        assert access_token == "access-token"
-        assert refresh_token == "refresh-token"
+        assert auth.access_token == "access-token"
+        assert auth.refresh_token == "refresh-token"
         assert calendar_id == "primary"
         assert recurring_event_id == "master-1"
         # Weekly on Wed, starting at 18:00 UTC.
@@ -241,8 +234,7 @@ class _FakeRecurringDetailsClient:
     async def upsert_recurring_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
         agendable_series_id: str,
@@ -253,8 +245,7 @@ class _FakeRecurringDetailsClient:
     async def upsert_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         event_id: str,
         agendable_occurrence_id: str,

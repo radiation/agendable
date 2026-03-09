@@ -20,6 +20,7 @@ from agendable.db.repos import (
     ExternalCalendarEventMirrorRepository,
 )
 from agendable.services.external_calendar_api import (
+    ExternalCalendarAuth,
     ExternalCalendarClient,
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
@@ -77,14 +78,17 @@ class GoogleCalendarSyncService:
 
         await self._maybe_refresh_google_access_token(connection)
         access_token = self._require_access_token(connection)
+        auth = ExternalCalendarAuth(
+            access_token=access_token,
+            refresh_token=connection.refresh_token,
+        )
         sync_token_for_request = await self._resolve_sync_token_for_request(connection)
 
         batch: ExternalCalendarSyncBatch
 
         try:
             batch = await self.calendar_client.list_events(
-                access_token=access_token,
-                refresh_token=connection.refresh_token,
+                auth=auth,
                 calendar_id=connection.external_calendar_id,
                 sync_token=sync_token_for_request,
             )
@@ -94,9 +98,12 @@ class GoogleCalendarSyncService:
             # 401 typically indicates an expired/revoked access token.
             if status == 401 and await self._refresh_google_access_token(connection):
                 access_token = self._require_access_token(connection)
-                batch = await self.calendar_client.list_events(
+                auth = ExternalCalendarAuth(
                     access_token=access_token,
                     refresh_token=connection.refresh_token,
+                )
+                batch = await self.calendar_client.list_events(
+                    auth=auth,
                     calendar_id=connection.external_calendar_id,
                     sync_token=sync_token_for_request,
                 )
@@ -108,8 +115,7 @@ class GoogleCalendarSyncService:
                 )
                 connection.sync_token = None
                 batch = await self.calendar_client.list_events(
-                    access_token=access_token,
-                    refresh_token=connection.refresh_token,
+                    auth=auth,
                     calendar_id=connection.external_calendar_id,
                     sync_token=None,
                 )
@@ -334,12 +340,14 @@ class GoogleCalendarSyncService:
         if not recurring_event_ids:
             return {}
 
-        access_token = self._require_access_token(connection)
+        auth = ExternalCalendarAuth(
+            access_token=self._require_access_token(connection),
+            refresh_token=connection.refresh_token,
+        )
         details_by_id: dict[str, ExternalRecurringEventDetails] = {}
         for recurring_event_id in recurring_event_ids:
             details = await self.calendar_client.get_recurring_event_details(
-                access_token=access_token,
-                refresh_token=connection.refresh_token,
+                auth=auth,
                 calendar_id=connection.external_calendar_id,
                 recurring_event_id=recurring_event_id,
             )
@@ -383,7 +391,10 @@ class GoogleCalendarSyncService:
         if base_url is None:
             return
 
-        access_token = self._require_access_token(connection)
+        auth = ExternalCalendarAuth(
+            access_token=self._require_access_token(connection),
+            refresh_token=connection.refresh_token,
+        )
         for mirror in mirrors:
             if mirror.external_event_id is None or mirror.linked_occurrence_id is None:
                 continue
@@ -392,8 +403,7 @@ class GoogleCalendarSyncService:
 
             occurrence_url = f"{base_url}/occurrences/{mirror.linked_occurrence_id}"
             await self.calendar_client.upsert_event_backlink(
-                access_token=access_token,
-                refresh_token=connection.refresh_token,
+                auth=auth,
                 calendar_id=connection.external_calendar_id,
                 event_id=mirror.external_event_id,
                 agendable_occurrence_id=str(mirror.linked_occurrence_id),
@@ -426,7 +436,10 @@ class GoogleCalendarSyncService:
         recurring_event_ids: Sequence[str],
         base_url: str,
     ) -> None:
-        access_token = self._require_access_token(connection)
+        auth = ExternalCalendarAuth(
+            access_token=self._require_access_token(connection),
+            refresh_token=connection.refresh_token,
+        )
         for recurring_event_id in recurring_event_ids:
             series = await self._find_series_for_recurring_event(
                 connection_id=connection.id,
@@ -437,8 +450,7 @@ class GoogleCalendarSyncService:
 
             series_url = f"{base_url}/series/{series.id}"
             await self.calendar_client.upsert_recurring_event_backlink(
-                access_token=access_token,
-                refresh_token=connection.refresh_token,
+                auth=auth,
                 calendar_id=connection.external_calendar_id,
                 recurring_event_id=recurring_event_id,
                 agendable_series_id=str(series.id),

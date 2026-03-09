@@ -4,6 +4,7 @@ from agendable.services.calendar_connection_service import (
 )
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 from agendable.services.external_calendar_api import (
+    ExternalCalendarAuth,
     ExternalCalendarClient,
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
@@ -23,6 +24,7 @@ from agendable.services.series_service import create_series_with_occurrences
 
 __all__ = [
     "CalendarEventMappingService",
+    "ExternalCalendarAuth",
     "ExternalCalendarClient",
     "ExternalCalendarEvent",
     "ExternalCalendarSyncBatch",

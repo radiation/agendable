@@ -12,6 +12,7 @@ from agendable.db.models import (
     ExternalCalendarConnection,
     ExternalCalendarEventMirror,
 )
+from agendable.services.external_calendar_api import ExternalCalendarAuth
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
@@ -25,13 +26,12 @@ class _FakeGoogleCalendarClient:
     async def list_events(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch:
-        assert access_token == "google-access-token"
-        assert refresh_token == "google-refresh-token"
+        assert auth.access_token == "google-access-token"
+        assert auth.refresh_token == "google-refresh-token"
         assert calendar_id == "primary"
         assert sync_token is None
         return ExternalCalendarSyncBatch(
@@ -54,8 +54,7 @@ class _FakeGoogleCalendarClient:
     async def get_recurring_event_details(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
     ) -> ExternalRecurringEventDetails | None:
@@ -64,8 +63,7 @@ class _FakeGoogleCalendarClient:
     async def upsert_recurring_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
         agendable_series_id: str,
@@ -76,8 +74,7 @@ class _FakeGoogleCalendarClient:
     async def upsert_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         event_id: str,
         agendable_occurrence_id: str,

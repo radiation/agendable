@@ -19,6 +19,7 @@ from agendable.db.repos import (
     ExternalCalendarEventMirrorRepository,
 )
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
+from agendable.services.external_calendar_api import ExternalCalendarAuth
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
@@ -37,21 +38,24 @@ class _RecordingClient:
     async def list_events(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch:
+        del auth
+        del calendar_id
+        del sync_token
         return self.batch
 
     async def get_recurring_event_details(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
     ) -> ExternalRecurringEventDetails | None:
+        del auth
+        del calendar_id
         return ExternalRecurringEventDetails(
             event_id=recurring_event_id,
             recurrence_rrule="FREQ=WEEKLY;INTERVAL=1;BYDAY=WE",
@@ -62,26 +66,30 @@ class _RecordingClient:
     async def upsert_recurring_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
         agendable_series_id: str,
         agendable_series_url: str | None,
     ) -> None:
+        del auth
+        del calendar_id
+        del agendable_series_id
         assert agendable_series_url is not None
         self.series_calls.append((recurring_event_id, agendable_series_url))
 
     async def upsert_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         event_id: str,
         agendable_occurrence_id: str,
         agendable_occurrence_url: str | None,
     ) -> None:
+        del auth
+        del calendar_id
+        del agendable_occurrence_id
         assert agendable_occurrence_url is not None
         self.occ_calls.append((event_id, agendable_occurrence_url))
 

@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 import agendable.services.google_calendar_client as gcal
+from agendable.services.external_calendar_api import ExternalCalendarAuth
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 
 
@@ -86,8 +87,7 @@ async def test_list_events_paginates_and_parses_items(monkeypatch: pytest.Monkey
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     batch = await client.list_events(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         sync_token=None,
     )
@@ -119,8 +119,7 @@ async def test_list_events_uses_sync_token_when_provided(monkeypatch: pytest.Mon
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     batch = await client.list_events(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         sync_token="prev-sync",
     )
@@ -147,8 +146,7 @@ async def test_get_recurring_event_details_parses_rrule_and_timezone(
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     details = await client.get_recurring_event_details(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         recurring_event_id="master-1",
     )
@@ -170,8 +168,7 @@ async def test_get_recurring_event_details_returns_none_for_cancelled_master(
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     details = await client.get_recurring_event_details(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         recurring_event_id="master-1",
     )
@@ -194,8 +191,7 @@ async def test_get_recurring_event_details_returns_none_for_all_day_master(
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     details = await client.get_recurring_event_details(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         recurring_event_id="master-1",
     )
@@ -219,8 +215,7 @@ async def test_upsert_recurring_event_backlink_patches_when_needed_and_replaces_
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     await client.upsert_recurring_event_backlink(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         recurring_event_id="master-1",
         agendable_series_id="series-123",
@@ -254,8 +249,7 @@ async def test_upsert_recurring_event_backlink_noops_when_already_up_to_date(
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     await client.upsert_recurring_event_backlink(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         recurring_event_id="master-1",
         agendable_series_id="series-123",
@@ -281,8 +275,7 @@ async def test_upsert_event_backlink_is_idempotent_when_already_up_to_date(
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     await client.upsert_event_backlink(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         event_id="evt-1",
         agendable_occurrence_id="occ-1",
@@ -309,8 +302,7 @@ async def test_upsert_event_backlink_patches_when_needed_and_appends_link(
 
     client = GoogleCalendarHttpClient(api_base_url="https://example.test")
     await client.upsert_event_backlink(
-        access_token="access",
-        refresh_token=None,
+        auth=ExternalCalendarAuth(access_token="access", refresh_token=None),
         calendar_id="primary",
         event_id="evt-1",
         agendable_occurrence_id="occ-1",

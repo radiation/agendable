@@ -80,6 +80,12 @@ async def oidc_start(request: Request) -> Response:
     oidc_client = auth_oidc_oauth_client()
     authorize_params = build_authorize_params(settings.oidc_auth_prompt)
 
+    # If Google Calendar sync is enabled, request offline access so we can refresh tokens
+    # in the background worker.
+    if settings.google_calendar_sync_enabled:
+        authorize_params.setdefault("access_type", "offline")
+        authorize_params.setdefault("include_granted_scopes", "true")
+
     return await oidc_client.authorize_redirect(request, redirect_uri, **authorize_params)
 
 

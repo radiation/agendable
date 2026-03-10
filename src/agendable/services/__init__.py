@@ -3,13 +3,14 @@ from agendable.services.calendar_connection_service import (
     upsert_google_primary_calendar_connection,
 )
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
-from agendable.services.google_calendar_client import GoogleCalendarHttpClient
-from agendable.services.google_calendar_sync_service import (
+from agendable.services.external_calendar_api import (
+    ExternalCalendarAuth,
+    ExternalCalendarClient,
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
-    GoogleCalendarClient,
-    GoogleCalendarSyncService,
 )
+from agendable.services.google_calendar_client import GoogleCalendarHttpClient
+from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
 from agendable.services.oidc_service import (
     OidcLinkResolution,
@@ -23,9 +24,10 @@ from agendable.services.series_service import create_series_with_occurrences
 
 __all__ = [
     "CalendarEventMappingService",
+    "ExternalCalendarAuth",
+    "ExternalCalendarClient",
     "ExternalCalendarEvent",
     "ExternalCalendarSyncBatch",
-    "GoogleCalendarClient",
     "GoogleCalendarHttpClient",
     "GoogleCalendarSyncService",
     "OidcLinkResolution",

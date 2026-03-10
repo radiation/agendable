@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
-from agendable.services.google_calendar_sync_service import (
+from agendable.services.external_calendar_api import (
+    ExternalCalendarAuth,
     ExternalCalendarEvent,
     ExternalCalendarSyncBatch,
     ExternalRecurringEventDetails,
@@ -173,18 +174,15 @@ class GoogleCalendarHttpClient:
     async def list_events(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch:
-        del refresh_token
-
         events: list[ExternalCalendarEvent] = []
         next_sync_token: str | None = None
         next_page_token: str | None = None
 
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {"Authorization": f"Bearer {auth.access_token}"}
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             while True:
                 params: dict[str, str] = {
@@ -236,14 +234,11 @@ class GoogleCalendarHttpClient:
     async def get_recurring_event_details(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
     ) -> ExternalRecurringEventDetails | None:
-        del refresh_token
-
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {"Authorization": f"Bearer {auth.access_token}"}
         encoded_event_id = quote(recurring_event_id, safe="")
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.get(
@@ -277,16 +272,13 @@ class GoogleCalendarHttpClient:
     async def upsert_recurring_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
         agendable_series_id: str,
         agendable_series_url: str | None,
     ) -> None:
-        del refresh_token
-
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {"Authorization": f"Bearer {auth.access_token}"}
         event_url = _event_url(
             api_base_url=self.api_base_url,
             calendar_id=calendar_id,
@@ -335,16 +327,13 @@ class GoogleCalendarHttpClient:
     async def upsert_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         event_id: str,
         agendable_occurrence_id: str,
         agendable_occurrence_url: str | None,
     ) -> None:
-        del refresh_token
-
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {"Authorization": f"Bearer {auth.access_token}"}
         event_url = _event_url(
             api_base_url=self.api_base_url,
             calendar_id=calendar_id,

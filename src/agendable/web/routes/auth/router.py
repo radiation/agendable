@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 from typing import cast
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -99,6 +100,17 @@ def _signup_form_context(
         "timezone": timezone,
         "email": email,
     }
+
+
+def _default_timezone_from_cookie(request: Request) -> str:
+    raw = (request.cookies.get("agendable_tz") or "").strip()
+    if not raw:
+        return "UTC"
+    try:
+        decoded = unquote(raw).strip()
+        return parse_timezone(decoded).key
+    except HTTPException:
+        return "UTC"
 
 
 def _render_signup_template(
@@ -288,7 +300,11 @@ async def signup_form(request: Request, session: AsyncSession = Depends(get_sess
     if redirect_response is not None:
         return redirect_response
 
-    return _render_signup_template(request, error=None)
+    return _render_signup_template(
+        request,
+        error=None,
+        form=_signup_form_context(timezone=_default_timezone_from_cookie(request)),
+    )
 
 
 @router.post("/signup", response_class=HTMLResponse)

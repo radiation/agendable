@@ -11,6 +11,7 @@ from agendable.db.repos import (
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
 )
+from agendable.services.external_calendar_api import ExternalCalendarAuth
 from agendable.services.google_calendar_sync_service import (
     ExternalCalendarSyncBatch,
     ExternalRecurringEventDetails,
@@ -22,8 +23,7 @@ class _ClientShouldNotBeCalled:
     async def list_events(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         sync_token: str | None,
     ) -> ExternalCalendarSyncBatch:  # pragma: no cover
@@ -32,8 +32,7 @@ class _ClientShouldNotBeCalled:
     async def get_recurring_event_details(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
     ) -> ExternalRecurringEventDetails | None:  # pragma: no cover
@@ -42,8 +41,7 @@ class _ClientShouldNotBeCalled:
     async def upsert_recurring_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         recurring_event_id: str,
         agendable_series_id: str,
@@ -54,8 +52,7 @@ class _ClientShouldNotBeCalled:
     async def upsert_event_backlink(
         self,
         *,
-        access_token: str,
-        refresh_token: str | None,
+        auth: ExternalCalendarAuth,
         calendar_id: str,
         event_id: str,
         agendable_occurrence_id: str,

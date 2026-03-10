@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Mapping
+from urllib.parse import unquote
 
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import Request
@@ -116,6 +117,9 @@ async def handle_login_callback(
     token_capture: OidcTokenCapture,
     settings: Settings,
 ) -> Response:
+    suggested_timezone = request.cookies.get("agendable_tz")
+    if suggested_timezone is not None:
+        suggested_timezone = unquote(suggested_timezone).strip() or None
     login_resolution = await resolve_oidc_login_resolution(
         session,
         provider=identity_provider,
@@ -123,6 +127,7 @@ async def handle_login_callback(
         email=email,
         userinfo=userinfo,
         is_bootstrap_admin_email=auth_routes.is_bootstrap_admin_email,
+        default_timezone=suggested_timezone,
     )
 
     user_or_response = await _resolve_login_user_or_response(

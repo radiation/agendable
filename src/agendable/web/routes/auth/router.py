@@ -101,6 +101,16 @@ def _signup_form_context(
     }
 
 
+def _default_timezone_from_cookie(request: Request) -> str:
+    raw = (request.cookies.get("agendable_tz") or "").strip()
+    if not raw:
+        return "UTC"
+    try:
+        return parse_timezone(raw).key
+    except HTTPException:
+        return "UTC"
+
+
 def _render_signup_template(
     request: Request,
     *,
@@ -288,7 +298,11 @@ async def signup_form(request: Request, session: AsyncSession = Depends(get_sess
     if redirect_response is not None:
         return redirect_response
 
-    return _render_signup_template(request, error=None)
+    return _render_signup_template(
+        request,
+        error=None,
+        form=_signup_form_context(timezone=_default_timezone_from_cookie(request)),
+    )
 
 
 @router.post("/signup", response_class=HTMLResponse)

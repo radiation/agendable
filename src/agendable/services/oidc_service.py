@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,20 +55,35 @@ async def provision_user_for_oidc(
     email: str,
     userinfo: Mapping[str, object],
     is_bootstrap_admin_email: Callable[[str], bool],
+    timezone: str | None = None,
 ) -> User:
     first_name, last_name = userinfo_name_parts(userinfo, email)
+    normalized_timezone = _normalize_provision_timezone(timezone)
     user = User(
         email=email,
         first_name=first_name,
         last_name=last_name,
         display_name=f"{first_name} {last_name}".strip(),
-        timezone="UTC",
+        timezone=normalized_timezone,
         role=(UserRole.admin if is_bootstrap_admin_email(email) else UserRole.user),
         password_hash=None,
     )
     session.add(user)
     await session.flush()
     return user
+
+
+def _normalize_provision_timezone(value: str | None) -> str:
+    if value is None:
+        return "UTC"
+    name = value.strip()
+    if not name:
+        return "UTC"
+    try:
+        _ = ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return "UTC"
+    return name
 
 
 async def resolve_oidc_link_resolution(
@@ -115,6 +131,7 @@ async def resolve_oidc_login_resolution(
     email: str,
     userinfo: Mapping[str, object],
     is_bootstrap_admin_email: Callable[[str], bool],
+    default_timezone: str | None = None,
 ) -> OidcLoginResolution:
     ext_repo = ExternalIdentityRepository(session)
     users = UserRepository(session)
@@ -139,6 +156,7 @@ async def resolve_oidc_login_resolution(
             email=email,
             userinfo=userinfo,
             is_bootstrap_admin_email=is_bootstrap_admin_email,
+            timezone=default_timezone,
         )
         return OidcLoginResolution(user=user, create_identity=True)
 

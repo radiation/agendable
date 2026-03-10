@@ -252,6 +252,72 @@ async def test_oidc_autoprovision_name_fallback_uses_email_localpart(
 
 
 @pytest.mark.asyncio
+async def test_oidc_callback_autoprovision_uses_timezone_cookie_when_valid(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_ID", "test-client")
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv(
+        "AGENDABLE_OIDC_METADATA_URL", "https://example.com/.well-known/openid-configuration"
+    )
+    monkeypatch.setattr(
+        auth_routes,
+        "_oidc_oauth_client",
+        lambda: _FakeOidcClient(
+            {
+                "sub": "sub-tz",
+                "email": "tz@example.com",
+                "email_verified": True,
+            }
+        ),
+    )
+
+    client.cookies.set("agendable_tz", "America/New_York")
+    response = await client.get("/auth/oidc/callback", follow_redirects=False)
+    assert response.status_code == 303
+
+    user = (
+        await db_session.execute(select(User).where(User.email == "tz@example.com"))
+    ).scalar_one()
+    assert user.timezone == "America/New_York"
+
+
+@pytest.mark.asyncio
+async def test_oidc_callback_autoprovision_ignores_timezone_cookie_when_invalid(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_ID", "test-client")
+    monkeypatch.setenv("AGENDABLE_OIDC_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv(
+        "AGENDABLE_OIDC_METADATA_URL", "https://example.com/.well-known/openid-configuration"
+    )
+    monkeypatch.setattr(
+        auth_routes,
+        "_oidc_oauth_client",
+        lambda: _FakeOidcClient(
+            {
+                "sub": "sub-tz-invalid",
+                "email": "tz-invalid@example.com",
+                "email_verified": True,
+            }
+        ),
+    )
+
+    client.cookies.set("agendable_tz", "Not/AZone")
+    response = await client.get("/auth/oidc/callback", follow_redirects=False)
+    assert response.status_code == 303
+
+    user = (
+        await db_session.execute(select(User).where(User.email == "tz-invalid@example.com"))
+    ).scalar_one()
+    assert user.timezone == "UTC"
+
+
+@pytest.mark.asyncio
 async def test_oidc_callback_rate_limit_blocks_repeated_attempts(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

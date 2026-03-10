@@ -116,6 +116,14 @@ async def test_signup_rejects_invalid_timezone(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_signup_form_defaults_timezone_from_cookie(client: AsyncClient) -> None:
+    client.cookies.set("agendable_tz", "America/New_York")
+    resp = await client.get("/signup")
+    assert resp.status_code == 200
+    assert 'option value="America/New_York" selected' in resp.text
+
+
+@pytest.mark.asyncio
 async def test_request_id_header_is_propagated_or_generated(client: AsyncClient) -> None:
     with_header = await client.get(
         "/", headers={"X-Request-ID": "req-test-123"}, follow_redirects=False

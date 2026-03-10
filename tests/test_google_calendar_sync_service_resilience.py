@@ -575,6 +575,64 @@ class _Fake401ThenSuccessClient:
         raise AssertionError("upsert_event_backlink should not be called in this test")
 
 
+class _Fake401Then500Client:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def list_events(
+        self,
+        *,
+        auth: ExternalCalendarAuth,
+        calendar_id: str,
+        sync_token: str | None,
+    ) -> ExternalCalendarSyncBatch:
+        self.calls += 1
+        assert calendar_id == "primary"
+        assert sync_token is None
+
+        request = httpx.Request("GET", "https://example.test")
+
+        if self.calls == 1:
+            assert auth.access_token == "old-access-token"
+            response = httpx.Response(401, request=request)
+            raise httpx.HTTPStatusError("Unauthorized", request=request, response=response)
+
+        assert auth.access_token == "new-access-token"
+        response = httpx.Response(500, request=request)
+        raise httpx.HTTPStatusError("Server error", request=request, response=response)
+
+    async def get_recurring_event_details(
+        self,
+        *,
+        auth: ExternalCalendarAuth,
+        calendar_id: str,
+        recurring_event_id: str,
+    ) -> ExternalRecurringEventDetails | None:
+        raise AssertionError("get_recurring_event_details should not be called in this test")
+
+    async def upsert_recurring_event_backlink(
+        self,
+        *,
+        auth: ExternalCalendarAuth,
+        calendar_id: str,
+        recurring_event_id: str,
+        agendable_series_id: str,
+        agendable_series_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_recurring_event_backlink should not be called in this test")
+
+    async def upsert_event_backlink(
+        self,
+        *,
+        auth: ExternalCalendarAuth,
+        calendar_id: str,
+        event_id: str,
+        agendable_occurrence_id: str,
+        agendable_occurrence_url: str | None,
+    ) -> None:
+        raise AssertionError("upsert_event_backlink should not be called in this test")
+
+
 @pytest.mark.asyncio
 async def test_google_calendar_sync_service_retries_after_401_when_refresh_succeeds(
     db_session: AsyncSession,
@@ -664,6 +722,85 @@ async def test_google_calendar_sync_service_retries_after_401_when_refresh_succe
     synced_count = await service.sync_connection(connection)
     assert synced_count == 1
     assert fake_client.calls == 2
+
+    refreshed = await db_session.get(ExternalCalendarConnection, connection.id)
+    assert refreshed is not None
+    assert refreshed.access_token == "new-access-token"
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_sync_service_persists_token_refresh_even_when_sync_fails_afterward(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        email=f"sync-401-refresh-persist-{uuid.uuid4()}@example.com",
+        first_name="Sync",
+        last_name="Persist",
+        display_name="Sync Persist",
+        timezone="UTC",
+        password_hash=None,
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    connection = ExternalCalendarConnection(
+        user_id=user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+        access_token="old-access-token",
+        refresh_token="refresh-token",
+        access_token_expires_at=datetime.now(UTC) + timedelta(hours=2),
+    )
+    db_session.add(connection)
+    await db_session.commit()
+
+    class _FakeTokenResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {"access_token": "new-access-token", "expires_in": 3600}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: object,
+            tb: object,
+        ) -> None:
+            return None
+
+        async def post(self, url: str, data: dict[str, str]) -> _FakeTokenResponse:
+            parsed = urlparse(url)
+            assert parsed.scheme == "https"
+            assert parsed.netloc == "oauth2.googleapis.com"
+            assert data["grant_type"] == "refresh_token"
+            assert data["refresh_token"] == "refresh-token"
+            return _FakeTokenResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+
+    service = GoogleCalendarSyncService(
+        connection_repo=ExternalCalendarConnectionRepository(db_session),
+        event_mirror_repo=ExternalCalendarEventMirrorRepository(db_session),
+        calendar_client=_Fake401Then500Client(),
+        event_mapper=CalendarEventMappingService(session=db_session),
+        settings=Settings(
+            google_calendar_sync_enabled=True,
+            oidc_client_id="client-id",
+            oidc_client_secret=SecretStr("client-secret"),
+            oidc_metadata_url="https://example.com/.well-known/openid-configuration",
+        ),
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await service.sync_connection(connection)
 
     refreshed = await db_session.get(ExternalCalendarConnection, connection.id)
     assert refreshed is not None

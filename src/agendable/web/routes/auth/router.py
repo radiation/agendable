@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 from typing import cast
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -106,7 +107,8 @@ def _default_timezone_from_cookie(request: Request) -> str:
     if not raw:
         return "UTC"
     try:
-        return parse_timezone(raw).key
+        decoded = unquote(raw).strip()
+        return parse_timezone(decoded).key
     except HTTPException:
         return "UTC"
 

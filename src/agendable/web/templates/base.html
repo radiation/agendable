@@ -12,7 +12,7 @@
                 if (document.cookie.includes("agendable_tz=")) return;
                 var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
                 if (!tz) return;
-                var cookie = "agendable_tz=" + encodeURIComponent(tz) + "; Path=/; Max-Age=31536000; SameSite=Lax";
+                var cookie = "agendable_tz=" + tz + "; Path=/; Max-Age=31536000; SameSite=Lax";
                 if (location && location.protocol === "https:") cookie += "; Secure";
                 document.cookie = cookie;
             } catch (e) {

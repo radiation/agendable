@@ -68,6 +68,10 @@ class GoogleCalendarSyncService:
         self.settings = settings
 
     async def sync_connection(self, connection: ExternalCalendarConnection) -> int:
+        refreshed_preflight = await self._maybe_refresh_google_access_token(connection)
+        if refreshed_preflight:
+            await self.connection_repo.commit()
+
         lock_acquired = await self._try_acquire_connection_sync_lock(connection)
         if not lock_acquired:
             logger.info(
@@ -76,7 +80,6 @@ class GoogleCalendarSyncService:
             )
             return 0
 
-        await self._maybe_refresh_google_access_token(connection)
         access_token = self._require_access_token(connection)
         auth = ExternalCalendarAuth(
             access_token=access_token,
@@ -97,6 +100,21 @@ class GoogleCalendarSyncService:
 
             # 401 typically indicates an expired/revoked access token.
             if status == 401 and await self._refresh_google_access_token(connection):
+                # Persist the refreshed token immediately. This ensures access-token
+                # updates aren't lost if the sync fails later and the caller doesn't
+                # commit (e.g. manual sync routes that catch exceptions).
+                await self.connection_repo.commit()
+
+                # Re-acquire the per-connection sync lock, since the Postgres
+                # advisory xact lock is released by commits.
+                lock_acquired = await self._try_acquire_connection_sync_lock(connection)
+                if not lock_acquired:
+                    logger.info(
+                        "google calendar sync skipped: connection lock not reacquired after refresh connection_id=%s",
+                        connection.id,
+                    )
+                    return 0
+
                 access_token = self._require_access_token(connection)
                 auth = ExternalCalendarAuth(
                     access_token=access_token,
@@ -168,17 +186,17 @@ class GoogleCalendarSyncService:
 
     async def _maybe_refresh_google_access_token(
         self, connection: ExternalCalendarConnection
-    ) -> None:
+    ) -> bool:
         expires_at = connection.access_token_expires_at
         if expires_at is None:
-            return
+            return False
 
         now = datetime.now(UTC)
         # Refresh a little early to avoid races.
         if expires_at > now + timedelta(seconds=60):
-            return
+            return False
 
-        await self._refresh_google_access_token(connection)
+        return await self._refresh_google_access_token(connection)
 
     async def _refresh_google_access_token(self, connection: ExternalCalendarConnection) -> bool:
         """Refresh the Google access token in-place.

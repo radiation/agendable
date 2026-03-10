@@ -57,6 +57,12 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "agendable", "check-db", "--timeout-seconds", "5" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     ports:
       - "8000:8000"
     environment:
@@ -77,9 +83,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "agendable", "check-db", "--timeout-seconds", "5" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     environment:
       AGENDABLE_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agendable
       AGENDABLE_SMTP_HOST: mailpit
@@ -95,9 +108,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "agendable", "check-db", "--timeout-seconds", "5" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     environment:
       AGENDABLE_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agendable
       AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED: "true"

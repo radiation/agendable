@@ -43,3 +43,17 @@ def test_configure_logging_keeps_security_audit_logger_at_info() -> None:
 
     audit_logger = logging.getLogger("agendable.security.audit")
     assert audit_logger.getEffectiveLevel() == logging.INFO
+
+
+def test_configure_logging_quiets_httpx_logs_when_not_debug() -> None:
+    configure_logging(Settings(log_level="INFO"))
+
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
+
+
+def test_configure_logging_keeps_httpx_logs_visible_in_debug() -> None:
+    configure_logging(Settings(log_level="DEBUG"))
+
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.INFO
+    assert logging.getLogger("httpcore").getEffectiveLevel() == logging.INFO

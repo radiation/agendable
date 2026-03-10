@@ -134,6 +134,8 @@ def configure_logging(settings: Settings | None = None) -> None:
     level = normalize_log_level(selected_settings.log_level)
     formatter_name = "json" if selected_settings.log_json else "plain"
 
+    http_client_level = "INFO" if level == "DEBUG" else "WARNING"
+
     dictConfig(
         {
             "version": 1,
@@ -163,6 +165,8 @@ def configure_logging(settings: Settings | None = None) -> None:
                 "agendable.security.audit": {
                     "level": "INFO",
                 },
+                "httpx": {"level": http_client_level},
+                "httpcore": {"level": http_client_level},
                 "uvicorn": {"level": level},
                 "uvicorn.error": {"level": level},
                 "uvicorn.access": {"level": level},

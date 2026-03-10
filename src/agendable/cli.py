@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
+
+from sqlalchemy import text
 
 import agendable.db as db
 from agendable.db.models import Base, Reminder
@@ -13,7 +15,7 @@ from agendable.db.repos import (
     ReminderRepository,
 )
 from agendable.db.repos.reminders import claim_reminder_attempt as claim_reminder_attempt_in_repo
-from agendable.logging_config import configure_logging
+from agendable.logging_config import configure_logging, log_with_fields
 from agendable.reminders import ReminderSender, build_reminder_sender
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
@@ -54,7 +56,21 @@ async def _run_due_reminders(sender: ReminderSender | None = None) -> None:
 
 async def _run_reminders_worker(poll_seconds: int) -> None:
     while True:
-        await _run_due_reminders()
+        started_at = datetime.now(UTC)
+        try:
+            await _run_due_reminders()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("reminders worker iteration failed")
+        finally:
+            duration_ms = int((datetime.now(UTC) - started_at).total_seconds() * 1000)
+            log_with_fields(
+                logger,
+                logging.INFO,
+                "reminders worker iteration complete",
+                duration_ms=duration_ms,
+            )
         await asyncio.sleep(poll_seconds)
 
 
@@ -83,8 +99,32 @@ async def _run_google_calendar_sync() -> int:
 
 async def _run_google_calendar_sync_worker(poll_seconds: int) -> None:
     while True:
-        await _run_google_calendar_sync()
+        started_at = datetime.now(UTC)
+        synced_event_count: int | None = None
+        try:
+            synced_event_count = await _run_google_calendar_sync()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("google calendar sync worker iteration failed")
+        finally:
+            duration_ms = int((datetime.now(UTC) - started_at).total_seconds() * 1000)
+            log_with_fields(
+                logger,
+                logging.INFO,
+                "google calendar sync worker iteration complete",
+                duration_ms=duration_ms,
+                synced_event_count=synced_event_count,
+            )
         await asyncio.sleep(poll_seconds)
+
+
+async def _check_db(*, timeout_seconds: float) -> None:
+    async def _ping() -> None:
+        async with db.engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+
+    await asyncio.wait_for(_ping(), timeout=timeout_seconds)
 
 
 def main() -> None:
@@ -94,6 +134,13 @@ def main() -> None:
     configure_logging(settings)
 
     sub.add_parser("init-db")
+    check_db = sub.add_parser("check-db")
+    check_db.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=5.0,
+        help="Fail if the DB ping exceeds this timeout.",
+    )
     sub.add_parser("run-reminders")
     sub.add_parser("run-google-calendar-sync")
     worker = sub.add_parser("run-reminders-worker")
@@ -113,6 +160,13 @@ def main() -> None:
 
     if args.cmd == "init-db":
         asyncio.run(_init_db())
+    elif args.cmd == "check-db":
+        timeout_seconds = max(0.1, float(args.timeout_seconds))
+        try:
+            asyncio.run(_check_db(timeout_seconds=timeout_seconds))
+        except Exception:
+            logger.exception("db healthcheck failed")
+            raise SystemExit(1) from None
     elif args.cmd == "run-reminders":
         asyncio.run(_run_due_reminders())
     elif args.cmd == "run-reminders-worker":

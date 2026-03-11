@@ -197,30 +197,33 @@ async def render_profile_template(
         provider=CalendarProvider.google,
         external_calendar_id="primary",
     )
-    pending_import_series = list(
-        (
-            await session.execute(
-                select(MeetingSeries)
-                .where(
-                    MeetingSeries.owner_user_id == user.id,
-                    MeetingSeries.imported_from_provider == CalendarProvider.google,
-                    MeetingSeries.import_decision == ImportedSeriesDecision.pending,
+    pending_import_series: list[MeetingSeries] = []
+    pending_import_recurrence: dict[uuid.UUID, str] = {}
+    if settings.google_calendar_sync_enabled:
+        pending_import_series = list(
+            (
+                await session.execute(
+                    select(MeetingSeries)
+                    .where(
+                        MeetingSeries.owner_user_id == user.id,
+                        MeetingSeries.imported_from_provider == CalendarProvider.google,
+                        MeetingSeries.import_decision == ImportedSeriesDecision.pending,
+                    )
+                    .order_by(MeetingSeries.created_at.desc())
                 )
-                .order_by(MeetingSeries.created_at.desc())
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    pending_import_recurrence = {
-        series.id: recurrence_label(
-            recurrence_rrule=series.recurrence_rrule,
-            recurrence_dtstart=series.recurrence_dtstart,
-            recurrence_timezone=series.recurrence_timezone,
-            default_interval_days=series.default_interval_days,
-        )
-        for series in pending_import_series
-    }
+        pending_import_recurrence = {
+            series.id: recurrence_label(
+                recurrence_rrule=series.recurrence_rrule,
+                recurrence_dtstart=series.recurrence_dtstart,
+                recurrence_timezone=series.recurrence_timezone,
+                default_interval_days=series.default_interval_days,
+            )
+            for series in pending_import_series
+        }
 
     return templates.TemplateResponse(
         request,

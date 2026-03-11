@@ -345,12 +345,19 @@ async def sync_google_calendar_now(
     response_class=RedirectResponse,
 )
 async def keep_google_imported_series(
+    request: Request,
     series_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
-) -> RedirectResponse:
+) -> Response:
+    settings = get_settings()
+    if not settings.google_calendar_sync_enabled:
+        raise HTTPException(status_code=404)
+
+    user = await auth_routes.get_user_or_404(session, current_user.id)
+
     series = await session.get(MeetingSeries, series_id)
-    if series is None or series.owner_user_id != current_user.id:
+    if series is None or series.owner_user_id != user.id:
         raise HTTPException(status_code=404)
 
     if (
@@ -361,12 +368,18 @@ async def keep_google_imported_series(
 
     connection_repo = ExternalCalendarConnectionRepository(session)
     connection = await connection_repo.get_for_user_provider_calendar(
-        user_id=current_user.id,
+        user_id=user.id,
         provider=CalendarProvider.google,
         external_calendar_id="primary",
     )
     if connection is None:
-        raise HTTPException(status_code=400, detail="No Google Calendar connection found")
+        return await auth_routes.render_profile_template(
+            request,
+            session=session,
+            user=user,
+            identity_error="No Google Calendar connection found yet.",
+            status_code=400,
+        )
 
     series.import_decision = ImportedSeriesDecision.kept
 
@@ -406,11 +419,18 @@ async def reject_google_imported_series(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
 ) -> RedirectResponse:
+    settings = get_settings()
+    if not settings.google_calendar_sync_enabled:
+        raise HTTPException(status_code=404)
+
     series = await session.get(MeetingSeries, series_id)
     if series is None or series.owner_user_id != current_user.id:
         raise HTTPException(status_code=404)
 
-    if series.imported_from_provider != CalendarProvider.google:
+    if (
+        series.imported_from_provider != CalendarProvider.google
+        or series.import_decision != ImportedSeriesDecision.pending
+    ):
         raise HTTPException(status_code=404)
 
     # Keep the series row as a tombstone so this external recurring ID stays rejected.

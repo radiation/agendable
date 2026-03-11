@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agendable.db.models import MeetingSeries
+from agendable.db.models import ImportedSeriesDecision, MeetingSeries
 from agendable.db.repos.base import BaseRepository
 
 
@@ -16,7 +16,13 @@ class MeetingSeriesRepository(BaseRepository[MeetingSeries]):
     async def list_for_owner(self, owner_user_id: uuid.UUID) -> list[MeetingSeries]:
         result = await self.session.execute(
             select(MeetingSeries)
-            .where(MeetingSeries.owner_user_id == owner_user_id)
+            .where(
+                MeetingSeries.owner_user_id == owner_user_id,
+                or_(
+                    MeetingSeries.import_decision.is_(None),
+                    MeetingSeries.import_decision == ImportedSeriesDecision.kept,
+                ),
+            )
             .order_by(MeetingSeries.created_at.desc())
         )
         return list(result.scalars().all())

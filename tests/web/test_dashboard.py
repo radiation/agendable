@@ -12,6 +12,7 @@ from agendable.db.models import (
     CalendarProvider,
     ExternalCalendarConnection,
     ExternalCalendarEventMirror,
+    ImportedSeriesDecision,
     MeetingOccurrence,
     MeetingOccurrenceAttendee,
     MeetingSeries,
@@ -202,3 +203,42 @@ async def test_dashboard_labels_imported_upcoming_meetings(
     assert resp.status_code == 200
     assert str(occurrence.id) in resp.text
     assert "(Imported)" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_hides_pending_imported_series(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await login_user(
+        client,
+        "pending-owner@example.com",
+        "pw-pending",
+        first_name="Pending",
+        last_name="Owner",
+    )
+    owner = (
+        await db_session.execute(select(User).where(User.email == "pending-owner@example.com"))
+    ).scalar_one()
+
+    series = MeetingSeries(
+        owner_user_id=owner.id,
+        title=f"Pending Imported {uuid.uuid4()}",
+        default_interval_days=7,
+        imported_from_provider=CalendarProvider.google,
+        import_external_series_id=f"master-{uuid.uuid4()}",
+        import_decision=ImportedSeriesDecision.pending,
+    )
+    db_session.add(series)
+    await db_session.flush()
+
+    occurrence = MeetingOccurrence(
+        series_id=series.id,
+        scheduled_at=datetime.now(UTC) + timedelta(days=1),
+        notes="",
+    )
+    db_session.add(occurrence)
+    await db_session.commit()
+
+    resp = await client.get("/dashboard")
+    assert resp.status_code == 200
+    assert str(occurrence.id) not in resp.text

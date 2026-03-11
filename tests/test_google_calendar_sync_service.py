@@ -11,6 +11,7 @@ from agendable.db.models import (
     CalendarProvider,
     ExternalCalendarConnection,
     ExternalCalendarEventMirror,
+    ImportedSeriesDecision,
     MeetingOccurrence,
     MeetingSeries,
     User,
@@ -277,6 +278,16 @@ async def test_google_calendar_sync_service_maps_recurring_instances_with_rrule(
         refresh_token="refresh-token",
     )
     db_session.add(connection)
+    db_session.add(
+        MeetingSeries(
+            owner_user_id=user.id,
+            title="Team Sync",
+            default_interval_days=7,
+            imported_from_provider=CalendarProvider.google,
+            import_external_series_id="master-1",
+            import_decision=ImportedSeriesDecision.kept,
+        )
+    )
     await db_session.commit()
 
     evt1 = ExternalCalendarEvent(

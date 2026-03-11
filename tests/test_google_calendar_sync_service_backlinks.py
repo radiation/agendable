@@ -11,6 +11,7 @@ from agendable.db.models import (
     CalendarProvider,
     ExternalCalendarConnection,
     ExternalCalendarEventMirror,
+    ImportedSeriesDecision,
     MeetingSeries,
     User,
 )
@@ -129,6 +130,17 @@ async def test_sync_service_writes_back_occurrence_links_when_enabled(
         db_session,
         scope="https://www.googleapis.com/auth/calendar.events",
     )
+    db_session.add(
+        MeetingSeries(
+            owner_user_id=connection.user_id,
+            title="Team Sync",
+            default_interval_days=7,
+            imported_from_provider=CalendarProvider.google,
+            import_external_series_id="master-1",
+            import_decision=ImportedSeriesDecision.kept,
+        )
+    )
+    await db_session.commit()
 
     evt = ExternalCalendarEvent(
         event_id="evt-1",
@@ -183,6 +195,17 @@ async def test_sync_service_writes_back_series_links_when_enabled(
         db_session,
         scope="https://www.googleapis.com/auth/calendar.events",
     )
+    db_session.add(
+        MeetingSeries(
+            owner_user_id=connection.user_id,
+            title="Team Sync",
+            default_interval_days=7,
+            imported_from_provider=CalendarProvider.google,
+            import_external_series_id="master-1",
+            import_decision=ImportedSeriesDecision.kept,
+        )
+    )
+    await db_session.commit()
 
     evt = ExternalCalendarEvent(
         event_id="evt-1",

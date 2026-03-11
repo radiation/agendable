@@ -7,12 +7,19 @@ from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import hash_password, require_user, verify_password
 from agendable.db import get_session
-from agendable.db.models import CalendarProvider, User, UserRole
+from agendable.db.models import (
+    CalendarProvider,
+    ImportedSeriesDecision,
+    MeetingSeries,
+    User,
+    UserRole,
+)
 from agendable.db.repos import (
     ExternalCalendarConnectionRepository,
     ExternalIdentityRepository,
@@ -33,7 +40,7 @@ from agendable.settings import get_settings
 from agendable.sso.oidc.client import OidcClient
 from agendable.web.routes.auth.oidc import router as auth_oidc_router
 from agendable.web.routes.auth.rate_limits import is_login_rate_limited, record_login_failure
-from agendable.web.routes.common import oauth, parse_timezone, templates
+from agendable.web.routes.common import oauth, parse_timezone, recurrence_label, templates
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
@@ -190,6 +197,34 @@ async def render_profile_template(
         provider=CalendarProvider.google,
         external_calendar_id="primary",
     )
+    pending_import_series: list[MeetingSeries] = []
+    pending_import_recurrence: dict[uuid.UUID, str] = {}
+    if settings.google_calendar_sync_enabled:
+        pending_import_series = list(
+            (
+                await session.execute(
+                    select(MeetingSeries)
+                    .where(
+                        MeetingSeries.owner_user_id == user.id,
+                        MeetingSeries.imported_from_provider == CalendarProvider.google,
+                        MeetingSeries.import_decision == ImportedSeriesDecision.pending,
+                    )
+                    .order_by(MeetingSeries.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        pending_import_recurrence = {
+            series.id: recurrence_label(
+                recurrence_rrule=series.recurrence_rrule,
+                recurrence_dtstart=series.recurrence_dtstart,
+                recurrence_timezone=series.recurrence_timezone,
+                default_interval_days=series.default_interval_days,
+            )
+            for series in pending_import_series
+        }
+
     return templates.TemplateResponse(
         request,
         "profile.html",
@@ -203,6 +238,8 @@ async def render_profile_template(
             "any_oidc_enabled": _auth_oidc_enabled() or _auth_keycloak_oidc_enabled(),
             "google_calendar_sync_enabled": settings.google_calendar_sync_enabled,
             "google_calendar_connected": google_calendar_connection is not None,
+            "pending_import_series": pending_import_series,
+            "pending_import_recurrence": pending_import_recurrence,
         },
         status_code=status_code,
     )

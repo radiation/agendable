@@ -44,6 +44,12 @@ class CalendarProvider(enum.StrEnum):
     google = "google"
 
 
+class ImportedSeriesDecision(enum.StrEnum):
+    pending = "pending"
+    kept = "kept"
+    rejected = "rejected"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -124,6 +130,16 @@ class MeetingSeries(Base):
         DateTime(timezone=True), nullable=True
     )
     recurrence_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    imported_from_provider: Mapped[CalendarProvider | None] = mapped_column(
+        Enum(CalendarProvider, name="calendar_provider"),
+        nullable=True,
+    )
+    import_external_series_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    import_decision: Mapped[ImportedSeriesDecision | None] = mapped_column(
+        Enum(ImportedSeriesDecision, name="imported_series_decision"),
+        nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)

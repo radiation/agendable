@@ -7,8 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import (
+    CalendarProvider,
     ExternalCalendarConnection,
     ExternalCalendarEventMirror,
+    ImportedSeriesDecision,
     MeetingOccurrence,
     MeetingSeries,
 )
@@ -74,6 +76,12 @@ class CalendarEventMappingService:
             recurring_event_details_by_id=recurring_event_details_by_id,
         )
 
+        if series.import_decision in {
+            ImportedSeriesDecision.pending,
+            ImportedSeriesDecision.rejected,
+        }:
+            return 0
+
         occurrence = linked_occurrence
         if occurrence is None:
             occurrence = await self._find_occurrence_by_schedule(
@@ -123,12 +131,25 @@ class CalendarEventMappingService:
                 return existing_series
 
         group_key = self._series_group_key(mirror)
+        existing_series = await self._find_series_for_import_key(
+            owner_user_id=connection.user_id,
+            import_external_series_id=group_key,
+        )
+        if existing_series is not None:
+            self._apply_series_title(existing_series, mirror)
+            self._apply_series_recurrence(existing_series, mirror, recurring_event_details_by_id)
+            return existing_series
+
         existing_series = await self._find_series_for_group_key(
             connection_id=connection.id,
             group_key=group_key,
             is_recurring=mirror.external_recurring_event_id is not None,
         )
         if existing_series is not None:
+            existing_series.imported_from_provider = CalendarProvider.google
+            existing_series.import_external_series_id = group_key
+            if existing_series.import_decision is None:
+                existing_series.import_decision = ImportedSeriesDecision.kept
             self._apply_series_title(existing_series, mirror)
             self._apply_series_recurrence(existing_series, mirror, recurring_event_details_by_id)
             return existing_series
@@ -138,11 +159,32 @@ class CalendarEventMappingService:
             title=self._series_title(mirror),
             default_interval_days=7,
             reminder_minutes_before=60,
+            imported_from_provider=CalendarProvider.google,
+            import_external_series_id=group_key,
+            import_decision=ImportedSeriesDecision.pending,
         )
         self._apply_series_recurrence(series, mirror, recurring_event_details_by_id)
         self.session.add(series)
         await self.session.flush()
         return series
+
+    async def _find_series_for_import_key(
+        self,
+        *,
+        owner_user_id: uuid.UUID,
+        import_external_series_id: str,
+    ) -> MeetingSeries | None:
+        result = await self.session.execute(
+            select(MeetingSeries)
+            .where(
+                MeetingSeries.owner_user_id == owner_user_id,
+                MeetingSeries.imported_from_provider == CalendarProvider.google,
+                MeetingSeries.import_external_series_id == import_external_series_id,
+            )
+            .order_by(MeetingSeries.created_at.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     def _apply_series_recurrence(
         self,

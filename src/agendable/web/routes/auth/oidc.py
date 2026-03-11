@@ -5,12 +5,20 @@ import uuid
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user, verify_password
 from agendable.db import get_session
-from agendable.db.models import CalendarProvider, User
+from agendable.db.models import (
+    CalendarProvider,
+    ExternalCalendarEventMirror,
+    ImportedSeriesDecision,
+    MeetingOccurrence,
+    MeetingSeries,
+    User,
+)
 from agendable.db.repos import (
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
@@ -329,6 +337,115 @@ async def sync_google_calendar_now(
             synced_event_count=synced_event_count,
         )
 
+    return RedirectResponse(url="/profile", status_code=303)
+
+
+@router.post(
+    "/profile/calendar/google/import-series/{series_id}/keep",
+    response_class=RedirectResponse,
+)
+async def keep_google_imported_series(
+    series_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_user),
+) -> RedirectResponse:
+    series = await session.get(MeetingSeries, series_id)
+    if series is None or series.owner_user_id != current_user.id:
+        raise HTTPException(status_code=404)
+
+    if (
+        series.imported_from_provider != CalendarProvider.google
+        or series.import_decision != ImportedSeriesDecision.pending
+    ):
+        raise HTTPException(status_code=404)
+
+    connection_repo = ExternalCalendarConnectionRepository(session)
+    connection = await connection_repo.get_for_user_provider_calendar(
+        user_id=current_user.id,
+        provider=CalendarProvider.google,
+        external_calendar_id="primary",
+    )
+    if connection is None:
+        raise HTTPException(status_code=400, detail="No Google Calendar connection found")
+
+    series.import_decision = ImportedSeriesDecision.kept
+
+    import_series_id = series.import_external_series_id
+    if import_series_id:
+        mirrors = list(
+            (
+                await session.execute(
+                    select(ExternalCalendarEventMirror)
+                    .where(
+                        ExternalCalendarEventMirror.connection_id == connection.id,
+                        ExternalCalendarEventMirror.external_recurring_event_id == import_series_id,
+                    )
+                    .order_by(ExternalCalendarEventMirror.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if mirrors:
+            await CalendarEventMappingService(session=session).map_mirrors(
+                connection=connection,
+                mirrors=mirrors,
+                recurring_event_details_by_id=None,
+            )
+
+    await session.commit()
+    return RedirectResponse(url="/profile", status_code=303)
+
+
+@router.post(
+    "/profile/calendar/google/import-series/{series_id}/reject",
+    response_class=RedirectResponse,
+)
+async def reject_google_imported_series(
+    series_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_user),
+) -> RedirectResponse:
+    series = await session.get(MeetingSeries, series_id)
+    if series is None or series.owner_user_id != current_user.id:
+        raise HTTPException(status_code=404)
+
+    if series.imported_from_provider != CalendarProvider.google:
+        raise HTTPException(status_code=404)
+
+    # Keep the series row as a tombstone so this external recurring ID stays rejected.
+    series.import_decision = ImportedSeriesDecision.rejected
+
+    mirrors = list(
+        (
+            await session.execute(
+                select(ExternalCalendarEventMirror)
+                .join(
+                    MeetingOccurrence,
+                    ExternalCalendarEventMirror.linked_occurrence_id == MeetingOccurrence.id,
+                )
+                .where(MeetingOccurrence.series_id == series.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for mirror in mirrors:
+        mirror.linked_occurrence_id = None
+
+    occurrences = list(
+        (
+            await session.execute(
+                select(MeetingOccurrence).where(MeetingOccurrence.series_id == series.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for occurrence in occurrences:
+        await session.delete(occurrence)
+
+    await session.commit()
     return RedirectResponse(url="/profile", status_code=303)
 
 

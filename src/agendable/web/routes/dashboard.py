@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from agendable.auth import require_user
 from agendable.db import get_session
 from agendable.db.models import (
+    ImportedSeriesDecision,
     MeetingOccurrence,
     MeetingOccurrenceAttendee,
     MeetingSeries,
@@ -48,6 +49,10 @@ async def dashboard(
                         MeetingSeries.owner_user_id == current_user.id,
                         MeetingOccurrenceAttendee.user_id == current_user.id,
                     ),
+                    or_(
+                        MeetingSeries.import_decision.is_(None),
+                        MeetingSeries.import_decision == ImportedSeriesDecision.kept,
+                    ),
                     MeetingOccurrence.scheduled_at >= now,
                 )
                 .distinct()
@@ -77,6 +82,10 @@ async def dashboard(
                     or_(
                         MeetingSeries.owner_user_id == current_user.id,
                         MeetingOccurrenceAttendee.user_id == current_user.id,
+                    ),
+                    or_(
+                        MeetingSeries.import_decision.is_(None),
+                        MeetingSeries.import_decision == ImportedSeriesDecision.kept,
                     ),
                     Task.is_done.is_(False),
                 )

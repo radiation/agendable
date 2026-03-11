@@ -102,6 +102,33 @@
             {% endfor %}
         </ul>
     </section>
+
+    {% if google_calendar_sync_enabled %}
+    <section class="section-card">
+        <h3>Imported series review</h3>
+        {% if pending_import_series %}
+        <p><small>Review imported recurring meetings before adding them to your active series list.</small></p>
+        <ul class="list-clean">
+            {% for series in pending_import_series %}
+            <li>
+                <strong>{{ series.title }}</strong>
+                <small>— {{ pending_import_recurrence[series.id] }}</small>
+                <form method="post" action="/profile/calendar/google/import-series/{{ series.id }}/keep"
+                    class="inline-actions">
+                    <button type="submit">Keep</button>
+                </form>
+                <form method="post" action="/profile/calendar/google/import-series/{{ series.id }}/reject"
+                    class="inline-actions">
+                    <button type="submit">Delete</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p><em>No imported series waiting for review.</em></p>
+        {% endif %}
+    </section>
+    {% endif %}
 </section>
 
 <script>

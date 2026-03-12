@@ -12,6 +12,11 @@ from agendable.services.external_calendar_api import (
 )
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
+from agendable.services.google_imported_series_service import (
+    GoogleImportedSeriesService,
+    ImportedSeriesNotFoundError,
+    MissingGoogleCalendarConnectionError,
+)
 from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
 from agendable.services.oidc_service import (
     OidcLinkResolution,
@@ -32,6 +37,9 @@ __all__ = [
     "ExternalCalendarSyncBatch",
     "GoogleCalendarHttpClient",
     "GoogleCalendarSyncService",
+    "GoogleImportedSeriesService",
+    "ImportedSeriesNotFoundError",
+    "MissingGoogleCalendarConnectionError",
     "OidcLinkResolution",
     "OidcLoginResolution",
     "complete_occurrence_and_roll_forward",

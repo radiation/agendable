@@ -3,6 +3,7 @@ from agendable.services.calendar_connection_service import (
     upsert_google_primary_calendar_connection,
 )
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
+from agendable.services.dashboard_service import DashboardService
 from agendable.services.external_calendar_api import (
     ExternalCalendarAuth,
     ExternalCalendarClient,
@@ -24,6 +25,7 @@ from agendable.services.series_service import create_series_with_occurrences
 
 __all__ = [
     "CalendarEventMappingService",
+    "DashboardService",
     "ExternalCalendarAuth",
     "ExternalCalendarClient",
     "ExternalCalendarEvent",

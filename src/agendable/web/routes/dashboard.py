@@ -4,20 +4,12 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from agendable.auth import require_user
 from agendable.db import get_session
-from agendable.db.models import (
-    ImportedSeriesDecision,
-    MeetingOccurrence,
-    MeetingOccurrenceAttendee,
-    MeetingSeries,
-    Task,
-    User,
-)
+from agendable.db.models import User
+from agendable.services.dashboard_service import DashboardService
 from agendable.web.routes.common import templates
 
 router = APIRouter()
@@ -30,72 +22,17 @@ async def dashboard(
     current_user: User = Depends(require_user),
 ) -> HTMLResponse:
     now = datetime.now(UTC)
+    dashboard_service = DashboardService(session=session)
 
-    upcoming_meetings = list(
-        (
-            await session.execute(
-                select(MeetingOccurrence)
-                .options(
-                    selectinload(MeetingOccurrence.series),
-                    selectinload(MeetingOccurrence.external_event_mirrors),
-                )
-                .join(MeetingSeries, MeetingOccurrence.series_id == MeetingSeries.id)
-                .outerjoin(
-                    MeetingOccurrenceAttendee,
-                    MeetingOccurrenceAttendee.occurrence_id == MeetingOccurrence.id,
-                )
-                .where(
-                    or_(
-                        MeetingSeries.owner_user_id == current_user.id,
-                        MeetingOccurrenceAttendee.user_id == current_user.id,
-                    ),
-                    or_(
-                        MeetingSeries.import_decision.is_(None),
-                        MeetingSeries.import_decision == ImportedSeriesDecision.kept,
-                    ),
-                    MeetingOccurrence.scheduled_at >= now,
-                )
-                .distinct()
-                .order_by(MeetingOccurrence.scheduled_at.asc())
-                .limit(20)
-            )
-        )
-        .scalars()
-        .all()
+    upcoming_meetings = await dashboard_service.list_upcoming_meetings(
+        user_id=current_user.id,
+        now=now,
+        limit=20,
     )
 
-    outstanding_tasks = list(
-        (
-            await session.execute(
-                select(Task)
-                .join(MeetingOccurrence, Task.occurrence_id == MeetingOccurrence.id)
-                .join(MeetingSeries, MeetingOccurrence.series_id == MeetingSeries.id)
-                .outerjoin(
-                    MeetingOccurrenceAttendee,
-                    MeetingOccurrenceAttendee.occurrence_id == MeetingOccurrence.id,
-                )
-                .options(
-                    selectinload(Task.assignee),
-                    selectinload(Task.occurrence).selectinload(MeetingOccurrence.series),
-                )
-                .where(
-                    or_(
-                        MeetingSeries.owner_user_id == current_user.id,
-                        MeetingOccurrenceAttendee.user_id == current_user.id,
-                    ),
-                    or_(
-                        MeetingSeries.import_decision.is_(None),
-                        MeetingSeries.import_decision == ImportedSeriesDecision.kept,
-                    ),
-                    Task.is_done.is_(False),
-                )
-                .distinct()
-                .order_by(Task.due_at.asc(), Task.created_at.asc())
-                .limit(200)
-            )
-        )
-        .scalars()
-        .all()
+    outstanding_tasks = await dashboard_service.list_outstanding_tasks(
+        user_id=current_user.id,
+        limit=200,
     )
 
     return templates.TemplateResponse(

@@ -8,6 +8,7 @@ from agendable.db.repos import (
 )
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 from agendable.services.dashboard_service import DashboardService
+from agendable.services.external_calendar_api import ExternalCalendarClient
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.google_imported_series_service import GoogleImportedSeriesService
@@ -30,14 +31,16 @@ def build_google_calendar_sync_service(
     *,
     session: AsyncSession,
     settings: Settings,
+    calendar_client: ExternalCalendarClient | None = None,
 ) -> GoogleCalendarSyncService:
+    resolved_calendar_client = calendar_client or GoogleCalendarHttpClient(
+        api_base_url=settings.google_calendar_api_base_url,
+        initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
+    )
     return GoogleCalendarSyncService(
         connection_repo=ExternalCalendarConnectionRepository(session),
         event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
-        calendar_client=GoogleCalendarHttpClient(
-            api_base_url=settings.google_calendar_api_base_url,
-            initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
-        ),
+        calendar_client=resolved_calendar_client,
         event_mapper=build_calendar_event_mapping_service(session=session),
         settings=settings,
     )

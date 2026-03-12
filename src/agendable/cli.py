@@ -9,10 +9,16 @@ from sqlalchemy import text
 
 import agendable.db as db
 from agendable.db.models import Base, Reminder
-from agendable.db.repos import ReminderRepository
+from agendable.db.repos import (
+    ExternalCalendarConnectionRepository,
+    ExternalCalendarEventMirrorRepository,
+    ReminderRepository,
+)
 from agendable.logging_config import configure_logging, log_with_fields
-from agendable.providers import build_google_calendar_sync_service
 from agendable.reminders import ReminderSender, build_reminder_sender
+from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
+from agendable.services.google_calendar_client import GoogleCalendarHttpClient
+from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.reminder_claim_service import (
     claim_reminder_attempt as claim_reminder_attempt_in_service,
 )
@@ -77,8 +83,14 @@ async def _run_google_calendar_sync() -> int:
         return 0
 
     async with db.SessionMaker() as session:
-        sync_service = build_google_calendar_sync_service(
-            session=session,
+        sync_service = GoogleCalendarSyncService(
+            connection_repo=ExternalCalendarConnectionRepository(session),
+            event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
+            calendar_client=GoogleCalendarHttpClient(
+                api_base_url=settings.google_calendar_api_base_url,
+                initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
+            ),
+            event_mapper=CalendarEventMappingService.from_session(session),
             settings=settings,
         )
         synced_event_count = await sync_service.sync_all_enabled_connections()

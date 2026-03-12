@@ -14,12 +14,12 @@ from agendable.db.models import (
     CalendarProvider,
     User,
 )
-from agendable.db.repos import (
-    ExternalCalendarConnectionRepository,
-    ExternalCalendarEventMirrorRepository,
-    ExternalIdentityRepository,
-)
+from agendable.db.repos import ExternalCalendarConnectionRepository, ExternalIdentityRepository
 from agendable.logging_config import log_with_fields
+from agendable.providers import (
+    build_google_calendar_sync_service,
+    build_google_imported_series_service,
+)
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
     OIDC_EVENT_CALLBACK,
@@ -31,11 +31,7 @@ from agendable.security.audit_constants import (
     OIDC_REASON_PROVIDER_DISABLED,
     OIDC_REASON_RATE_LIMITED,
 )
-from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
-from agendable.services.google_calendar_client import GoogleCalendarHttpClient
-from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.google_imported_series_service import (
-    GoogleImportedSeriesService,
     ImportedSeriesNotFoundError,
     MissingGoogleCalendarConnectionError,
 )
@@ -59,14 +55,6 @@ from agendable.web.routes.auth.rate_limits import is_identity_link_start_rate_li
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
-
-
-def build_google_calendar_client() -> GoogleCalendarHttpClient:
-    settings = get_settings()
-    return GoogleCalendarHttpClient(
-        api_base_url=settings.google_calendar_api_base_url,
-        initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
-    )
 
 
 @router.get("/auth/oidc/start", response_class=RedirectResponse)
@@ -309,11 +297,8 @@ async def sync_google_calendar_now(
             status_code=400,
         )
 
-    sync_service = GoogleCalendarSyncService(
-        connection_repo=connection_repo,
-        event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
-        calendar_client=build_google_calendar_client(),
-        event_mapper=CalendarEventMappingService.from_session(session),
+    sync_service = build_google_calendar_sync_service(
+        session=session,
         settings=settings,
     )
     try:
@@ -356,7 +341,7 @@ async def keep_google_imported_series(
 
     user = await auth_routes.get_user_or_404(session, current_user.id)
 
-    import_service = GoogleImportedSeriesService.from_session(session)
+    import_service = build_google_imported_series_service(session=session)
     try:
         await import_service.keep_pending_google_series(
             user_id=user.id,
@@ -389,7 +374,7 @@ async def reject_google_imported_series(
     if not settings.google_calendar_sync_enabled:
         raise HTTPException(status_code=404)
 
-    import_service = GoogleImportedSeriesService.from_session(session)
+    import_service = build_google_imported_series_service(session=session)
     try:
         await import_service.reject_pending_google_series(
             user_id=current_user.id,

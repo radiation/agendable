@@ -12,11 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User
-from agendable.db.repos import (
-    ExternalCalendarConnectionRepository,
-    ExternalCalendarEventMirrorRepository,
-)
+from agendable.db.repos import ExternalCalendarConnectionRepository
 from agendable.logging_config import log_with_fields
+from agendable.providers import (
+    build_google_calendar_sync_service as build_google_calendar_sync_service_provider,
+)
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
     OIDC_EVENT_CALLBACK,
@@ -30,8 +30,6 @@ from agendable.services.calendar_connection_service import (
     should_capture_google_calendar_token,
     upsert_google_primary_calendar_connection,
 )
-from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
-from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.oidc_service import (
     OidcLoginResolution,
@@ -74,15 +72,7 @@ def build_google_calendar_sync_service(
     session: AsyncSession,
     settings: Settings,
 ) -> GoogleCalendarSyncService:
-    return GoogleCalendarSyncService(
-        connection_repo=ExternalCalendarConnectionRepository(session),
-        event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
-        calendar_client=GoogleCalendarHttpClient(
-            api_base_url=settings.google_calendar_api_base_url,
-            initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
-        ),
-        event_mapper=CalendarEventMappingService.from_session(session),
-    )
+    return build_google_calendar_sync_service_provider(session=session, settings=settings)
 
 
 async def _maybe_auto_sync_new_connection(

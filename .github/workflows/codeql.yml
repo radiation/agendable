@@ -23,6 +23,14 @@ jobs:
         with:
           path: repo
 
+      - name: Debug workspace path
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          pwd
+          ls -la
+          ls -la "$GITHUB_WORKSPACE" || true
+          ls -la "$GITHUB_WORKSPACE/repo" || true
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@0d579ffd059c29b07949a3cce3983f0780820c98 # v4
         with:

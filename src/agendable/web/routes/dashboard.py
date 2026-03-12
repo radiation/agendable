@@ -4,12 +4,11 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.auth import require_user
-from agendable.db import get_session
 from agendable.db.models import User
-from agendable.providers import build_dashboard_service
+from agendable.services.dashboard_service import DashboardService
+from agendable.web.dependencies import get_dashboard_service
 from agendable.web.routes.common import templates
 
 router = APIRouter()
@@ -18,11 +17,10 @@ router = APIRouter()
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    dashboard_service: DashboardService = Depends(get_dashboard_service),
     current_user: User = Depends(require_user),
 ) -> HTMLResponse:
     now = datetime.now(UTC)
-    dashboard_service = build_dashboard_service(session=session)
 
     upcoming_meetings = await dashboard_service.list_upcoming_meetings(
         user_id=current_user.id,

@@ -16,10 +16,6 @@ from agendable.db.models import (
 )
 from agendable.db.repos import ExternalCalendarConnectionRepository, ExternalIdentityRepository
 from agendable.logging_config import log_with_fields
-from agendable.providers import (
-    build_google_calendar_sync_service,
-    build_google_imported_series_service,
-)
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
     OIDC_EVENT_CALLBACK,
@@ -31,7 +27,9 @@ from agendable.security.audit_constants import (
     OIDC_REASON_PROVIDER_DISABLED,
     OIDC_REASON_RATE_LIMITED,
 )
+from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.google_imported_series_service import (
+    GoogleImportedSeriesService,
     ImportedSeriesNotFoundError,
     MissingGoogleCalendarConnectionError,
 )
@@ -40,6 +38,10 @@ from agendable.sso.oidc.flow import (
     build_authorize_params,
     get_oidc_link_user_id,
     set_oidc_link_user_id,
+)
+from agendable.web.dependencies import (
+    get_google_calendar_sync_service,
+    get_google_imported_series_service,
 )
 from agendable.web.routes import auth as auth_routes
 from agendable.web.routes.auth.oidc_callbacks import (
@@ -276,6 +278,7 @@ async def sync_google_calendar_now(
     request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    sync_service: GoogleCalendarSyncService = Depends(get_google_calendar_sync_service),
 ) -> Response:
     settings = get_settings()
     if not settings.google_calendar_sync_enabled:
@@ -297,10 +300,6 @@ async def sync_google_calendar_now(
             status_code=400,
         )
 
-    sync_service = build_google_calendar_sync_service(
-        session=session,
-        settings=settings,
-    )
     try:
         synced_event_count = await sync_service.sync_connection(connection)
     except Exception:
@@ -334,6 +333,7 @@ async def keep_google_imported_series(
     series_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    import_service: GoogleImportedSeriesService = Depends(get_google_imported_series_service),
 ) -> Response:
     settings = get_settings()
     if not settings.google_calendar_sync_enabled:
@@ -341,7 +341,6 @@ async def keep_google_imported_series(
 
     user = await auth_routes.get_user_or_404(session, current_user.id)
 
-    import_service = build_google_imported_series_service(session=session)
     try:
         await import_service.keep_pending_google_series(
             user_id=user.id,
@@ -369,12 +368,12 @@ async def reject_google_imported_series(
     series_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    import_service: GoogleImportedSeriesService = Depends(get_google_imported_series_service),
 ) -> RedirectResponse:
     settings = get_settings()
     if not settings.google_calendar_sync_enabled:
         raise HTTPException(status_code=404)
 
-    import_service = build_google_imported_series_service(session=session)
     try:
         await import_service.reject_pending_google_series(
             user_id=current_user.id,

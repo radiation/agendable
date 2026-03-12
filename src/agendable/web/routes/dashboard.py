@@ -22,7 +22,7 @@ async def dashboard(
     current_user: User = Depends(require_user),
 ) -> HTMLResponse:
     now = datetime.now(UTC)
-    dashboard_service = DashboardService(session=session)
+    dashboard_service = DashboardService.from_session(session)
 
     upcoming_meetings = await dashboard_service.list_upcoming_meetings(
         user_id=current_user.id,

@@ -313,7 +313,7 @@ async def sync_google_calendar_now(
         connection_repo=connection_repo,
         event_mirror_repo=ExternalCalendarEventMirrorRepository(session),
         calendar_client=build_google_calendar_client(),
-        event_mapper=CalendarEventMappingService(session=session),
+        event_mapper=CalendarEventMappingService.from_session(session),
         settings=settings,
     )
     try:
@@ -356,7 +356,7 @@ async def keep_google_imported_series(
 
     user = await auth_routes.get_user_or_404(session, current_user.id)
 
-    import_service = GoogleImportedSeriesService(session=session)
+    import_service = GoogleImportedSeriesService.from_session(session)
     try:
         await import_service.keep_pending_google_series(
             user_id=user.id,
@@ -389,7 +389,7 @@ async def reject_google_imported_series(
     if not settings.google_calendar_sync_enabled:
         raise HTTPException(status_code=404)
 
-    import_service = GoogleImportedSeriesService(session=session)
+    import_service = GoogleImportedSeriesService.from_session(session)
     try:
         await import_service.reject_pending_google_series(
             user_id=current_user.id,

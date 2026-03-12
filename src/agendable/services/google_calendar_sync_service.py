@@ -58,15 +58,36 @@ class GoogleCalendarSyncService:
         *,
         connection_repo: ExternalCalendarConnectionRepository,
         event_mirror_repo: ExternalCalendarEventMirrorRepository,
+        series_repo: MeetingSeriesRepository | None = None,
         calendar_client: ExternalCalendarClient,
         event_mapper: CalendarEventMapper | None = None,
         settings: Settings | None = None,
     ) -> None:
         self.connection_repo = connection_repo
         self.event_mirror_repo = event_mirror_repo
+        self.series_repo = series_repo or MeetingSeriesRepository(event_mirror_repo.session)
         self.calendar_client = calendar_client
         self.event_mapper = event_mapper
         self.settings = settings
+
+    @classmethod
+    def from_repositories(
+        cls,
+        *,
+        connection_repo: ExternalCalendarConnectionRepository,
+        event_mirror_repo: ExternalCalendarEventMirrorRepository,
+        calendar_client: ExternalCalendarClient,
+        event_mapper: CalendarEventMapper | None = None,
+        settings: Settings | None = None,
+    ) -> GoogleCalendarSyncService:
+        return cls(
+            connection_repo=connection_repo,
+            event_mirror_repo=event_mirror_repo,
+            series_repo=MeetingSeriesRepository(event_mirror_repo.session),
+            calendar_client=calendar_client,
+            event_mapper=event_mapper,
+            settings=settings,
+        )
 
     async def sync_connection(self, connection: ExternalCalendarConnection) -> int:
         refreshed_preflight = await self._maybe_refresh_google_access_token(connection)
@@ -529,8 +550,7 @@ class GoogleCalendarSyncService:
         connection_id: uuid.UUID,
         recurring_event_id: str,
     ) -> MeetingSeries | None:
-        series_repo = MeetingSeriesRepository(self.event_mirror_repo.session)
-        return await series_repo.find_for_connection_recurring_event(
+        return await self.series_repo.find_for_connection_recurring_event(
             connection_id=connection_id,
             recurring_event_id=recurring_event_id,
         )

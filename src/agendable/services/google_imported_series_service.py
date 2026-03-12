@@ -27,19 +27,40 @@ class MissingGoogleCalendarConnectionError(Exception):
 
 
 class GoogleImportedSeriesService:
-    def __init__(self, *, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        *,
+        session: AsyncSession,
+        series_repo: MeetingSeriesRepository | None = None,
+        mirror_repo: ExternalCalendarEventMirrorRepository | None = None,
+        occurrence_repo: MeetingOccurrenceRepository | None = None,
+        connection_repo: ExternalCalendarConnectionRepository | None = None,
+        event_mapper: CalendarEventMappingService | None = None,
+    ) -> None:
         self.session = session
-        self.series_repo = MeetingSeriesRepository(session)
-        self.mirror_repo = ExternalCalendarEventMirrorRepository(session)
-        self.occurrence_repo = MeetingOccurrenceRepository(session)
+        self.series_repo = series_repo or MeetingSeriesRepository(session)
+        self.mirror_repo = mirror_repo or ExternalCalendarEventMirrorRepository(session)
+        self.occurrence_repo = occurrence_repo or MeetingOccurrenceRepository(session)
+        self.connection_repo = connection_repo or ExternalCalendarConnectionRepository(session)
+        self.event_mapper = event_mapper or CalendarEventMappingService.from_session(session)
+
+    @classmethod
+    def from_session(cls, session: AsyncSession) -> GoogleImportedSeriesService:
+        return cls(
+            session=session,
+            series_repo=MeetingSeriesRepository(session),
+            mirror_repo=ExternalCalendarEventMirrorRepository(session),
+            occurrence_repo=MeetingOccurrenceRepository(session),
+            connection_repo=ExternalCalendarConnectionRepository(session),
+            event_mapper=CalendarEventMappingService.from_session(session),
+        )
 
     async def keep_pending_google_series(self, *, user_id: uuid.UUID, series_id: uuid.UUID) -> None:
         series = await self._get_pending_google_series_for_user(
             user_id=user_id, series_id=series_id
         )
 
-        connection_repo = ExternalCalendarConnectionRepository(self.session)
-        connection = await connection_repo.get_for_user_provider_calendar(
+        connection = await self.connection_repo.get_for_user_provider_calendar(
             user_id=user_id,
             provider=CalendarProvider.google,
             external_calendar_id="primary",
@@ -56,7 +77,7 @@ class GoogleImportedSeriesService:
                 recurring_event_id=import_series_id,
             )
             if mirrors:
-                await CalendarEventMappingService(session=self.session).map_mirrors(
+                await self.event_mapper.map_mirrors(
                     connection=connection,
                     mirrors=mirrors,
                     recurring_event_details_by_id=None,

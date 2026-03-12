@@ -22,10 +22,24 @@ from agendable.services.occurrence_service import complete_occurrence_and_roll_f
 
 
 class CalendarEventMappingService:
-    def __init__(self, *, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        *,
+        session: AsyncSession,
+        occurrence_repo: MeetingOccurrenceRepository | None = None,
+        series_repo: MeetingSeriesRepository | None = None,
+    ) -> None:
         self.session = session
-        self.occurrence_repo = MeetingOccurrenceRepository(session)
-        self.series_repo = MeetingSeriesRepository(session)
+        self.occurrence_repo = occurrence_repo or MeetingOccurrenceRepository(session)
+        self.series_repo = series_repo or MeetingSeriesRepository(session)
+
+    @classmethod
+    def from_session(cls, session: AsyncSession) -> CalendarEventMappingService:
+        return cls(
+            session=session,
+            occurrence_repo=MeetingOccurrenceRepository(session),
+            series_repo=MeetingSeriesRepository(session),
+        )
 
     async def map_mirrors(
         self,

@@ -90,7 +90,7 @@ async def _run_google_calendar_sync() -> int:
                 api_base_url=settings.google_calendar_api_base_url,
                 initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
             ),
-            event_mapper=CalendarEventMappingService(session=session),
+            event_mapper=CalendarEventMappingService.from_session(session),
             settings=settings,
         )
         synced_event_count = await sync_service.sync_all_enabled_connections()

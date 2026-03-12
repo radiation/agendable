@@ -10,8 +10,12 @@ from agendable.db.repos import DashboardRepository
 
 
 class DashboardService:
-    def __init__(self, *, session: AsyncSession) -> None:
-        self.dashboard_repo = DashboardRepository(session)
+    def __init__(self, *, dashboard_repo: DashboardRepository) -> None:
+        self.dashboard_repo = dashboard_repo
+
+    @classmethod
+    def from_session(cls, session: AsyncSession) -> DashboardService:
+        return cls(dashboard_repo=DashboardRepository(session))
 
     async def list_upcoming_meetings(
         self,

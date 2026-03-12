@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import (
     CalendarProvider,
-    ExternalCalendarEventMirror,
     ImportedSeriesDecision,
-    MeetingOccurrence,
     MeetingSeries,
 )
-from agendable.db.repos import ExternalCalendarConnectionRepository
+from agendable.db.repos import (
+    ExternalCalendarConnectionRepository,
+    ExternalCalendarEventMirrorRepository,
+    MeetingOccurrenceRepository,
+    MeetingSeriesRepository,
+)
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 
 
@@ -27,6 +29,9 @@ class MissingGoogleCalendarConnectionError(Exception):
 class GoogleImportedSeriesService:
     def __init__(self, *, session: AsyncSession) -> None:
         self.session = session
+        self.series_repo = MeetingSeriesRepository(session)
+        self.mirror_repo = ExternalCalendarEventMirrorRepository(session)
+        self.occurrence_repo = MeetingOccurrenceRepository(session)
 
     async def keep_pending_google_series(self, *, user_id: uuid.UUID, series_id: uuid.UUID) -> None:
         series = await self._get_pending_google_series_for_user(
@@ -46,20 +51,9 @@ class GoogleImportedSeriesService:
 
         import_series_id = series.import_external_series_id
         if import_series_id:
-            mirrors = list(
-                (
-                    await self.session.execute(
-                        select(ExternalCalendarEventMirror)
-                        .where(
-                            ExternalCalendarEventMirror.connection_id == connection.id,
-                            ExternalCalendarEventMirror.external_recurring_event_id
-                            == import_series_id,
-                        )
-                        .order_by(ExternalCalendarEventMirror.created_at.asc())
-                    )
-                )
-                .scalars()
-                .all()
+            mirrors = await self.mirror_repo.list_for_connection_recurring_event(
+                connection_id=connection.id,
+                recurring_event_id=import_series_id,
             )
             if mirrors:
                 await CalendarEventMappingService(session=self.session).map_mirrors(
@@ -83,32 +77,11 @@ class GoogleImportedSeriesService:
         # Keep the series row as a tombstone so this external recurring ID stays rejected.
         series.import_decision = ImportedSeriesDecision.rejected
 
-        mirrors = list(
-            (
-                await self.session.execute(
-                    select(ExternalCalendarEventMirror)
-                    .join(
-                        MeetingOccurrence,
-                        ExternalCalendarEventMirror.linked_occurrence_id == MeetingOccurrence.id,
-                    )
-                    .where(MeetingOccurrence.series_id == series.id)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        mirrors = await self.mirror_repo.list_linked_to_series(series_id=series.id)
         for mirror in mirrors:
             mirror.linked_occurrence_id = None
 
-        occurrences = list(
-            (
-                await self.session.execute(
-                    select(MeetingOccurrence).where(MeetingOccurrence.series_id == series.id)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        occurrences = await self.occurrence_repo.list_for_series(series.id)
         for occurrence in occurrences:
             await self.session.delete(occurrence)
 
@@ -120,14 +93,11 @@ class GoogleImportedSeriesService:
         user_id: uuid.UUID,
         series_id: uuid.UUID,
     ) -> MeetingSeries:
-        series = await self.session.get(MeetingSeries, series_id)
-        if series is None or series.owner_user_id != user_id:
-            raise ImportedSeriesNotFoundError
-
-        if (
-            series.imported_from_provider != CalendarProvider.google
-            or series.import_decision != ImportedSeriesDecision.pending
-        ):
+        series = await self.series_repo.get_pending_google_import_for_owner(
+            series_id=series_id,
+            owner_user_id=user_id,
+        )
+        if series is None:
             raise ImportedSeriesNotFoundError
 
         return series

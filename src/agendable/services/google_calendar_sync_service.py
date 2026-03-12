@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 
 import httpx
-from sqlalchemy import select, text
+from sqlalchemy import text
 
 from agendable.db.models import (
     CalendarProvider,
     ExternalCalendarConnection,
     ExternalCalendarEventMirror,
-    MeetingOccurrence,
     MeetingSeries,
 )
 from agendable.db.repos import (
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
+    MeetingSeriesRepository,
 )
 from agendable.services.external_calendar_api import (
     ExternalCalendarAuth,
@@ -525,25 +526,14 @@ class GoogleCalendarSyncService:
     async def _find_series_for_recurring_event(
         self,
         *,
-        connection_id: object,
+        connection_id: uuid.UUID,
         recurring_event_id: str,
     ) -> MeetingSeries | None:
-        session = self.event_mirror_repo.session
-        result = await session.execute(
-            select(MeetingSeries)
-            .join(MeetingOccurrence, MeetingOccurrence.series_id == MeetingSeries.id)
-            .join(
-                ExternalCalendarEventMirror,
-                ExternalCalendarEventMirror.linked_occurrence_id == MeetingOccurrence.id,
-            )
-            .where(
-                ExternalCalendarEventMirror.connection_id == connection_id,
-                ExternalCalendarEventMirror.external_recurring_event_id == recurring_event_id,
-            )
-            .order_by(MeetingSeries.created_at.asc())
-            .limit(1)
+        series_repo = MeetingSeriesRepository(self.event_mirror_repo.session)
+        return await series_repo.find_for_connection_recurring_event(
+            connection_id=connection_id,
+            recurring_event_id=recurring_event_id,
         )
-        return result.scalar_one_or_none()
 
     async def sync_all_enabled_connections(self) -> int:
         synced_event_count = 0

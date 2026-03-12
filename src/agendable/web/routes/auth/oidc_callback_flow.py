@@ -177,6 +177,7 @@ async def handle_login_callback(
         )
 
     await auth_routes.maybe_promote_bootstrap_admin(user, session)
+    await session.commit()
 
     request.session["user_id"] = str(user.id)
     audit_oidc_success(
@@ -241,7 +242,7 @@ async def _create_login_identity_if_needed(
         logger.info("OIDC callback linking or creating SSO identity for email=%s", email)
     ext = ExternalIdentity(user_id=user.id, provider=identity_provider, subject=sub, email=email)
     session.add(ext)
-    await session.commit()
+    await session.flush()
 
 
 async def _exchange_token_or_error(

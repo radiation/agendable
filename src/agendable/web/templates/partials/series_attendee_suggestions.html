@@ -4,8 +4,9 @@
     {% for user in users %}
     <li>
         <button type="button" data-attendee-email="{{ user.email }}"
+            data-attendee-label="{{ user.display_name }} &lt;{{ user.email }}&gt;"
             style="display: block; width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer;">
-            {{ user.display_name }} ({{ user.email }})
+            {{ user.display_name }} &lt;{{ user.email }}&gt;
         </button>
     </li>
     {% endfor %}

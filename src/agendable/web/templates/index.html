@@ -13,14 +13,14 @@
     {% else %}
     <section class="section-card">
         <h3>Create series</h3>
-        <form method="post" action="/series" class="form-grid">
+        <form method="post" action="/series" class="form-grid create-series-form">
             <label>
                 Title
                 <input name="title" required />
             </label>
 
             <label>
-                Repeat
+                Repeats
                 <select id="recurrence-freq" name="recurrence_freq" required hx-get="/series/recurrence-options"
                     hx-target="#recurrence-options" hx-swap="innerHTML">
                     <option value="DAILY">Daily</option>
@@ -29,7 +29,7 @@
                 </select>
             </label>
             <label>
-                Every
+                Interval
                 <input name="recurrence_interval" type="number" min="1" max="365" value="1" required />
             </label>
 
@@ -37,44 +37,54 @@
                 {% include "partials/series_recurrence_options.html" %}
             </div>
 
-            <label>
-                Time
-                <input name="recurrence_time" type="time" value="09:00" required />
-            </label>
-            <label>
-                Time zone
-                <select id="recurrence-timezone" name="recurrence_timezone" required>
-                    {% set selected_tz = current_user.timezone if current_user and current_user.timezone else "UTC" %}
-                    {% set ns = namespace(found=false) %}
-                    {% for tz_value, tz_label in timezone_options %}
-                    {% if tz_value == selected_tz %}{% set ns.found = true %}{% endif %}
-                    <option value="{{ tz_value }}" {% if tz_value==selected_tz %}selected{% endif %}>{{ tz_label }}
-                    </option>
-                    {% endfor %}
-                    {% if selected_tz and not ns.found %}
-                    <option value="{{ selected_tz }}" selected>{{ selected_tz }} (custom)</option>
-                    {% endif %}
-                </select>
-            </label>
-            <label>
-                Start date
-                <input name="recurrence_start_date" type="date" required />
-            </label>
-            <label>
-                Generate
-                <input name="generate_count" type="number" min="1" max="200" value="10" required />
-            </label>
-            <label>
-                Reminder lead (minutes)
-                <input name="reminder_minutes_before" type="number" min="0" max="43200" value="60" required />
-            </label>
+            <div class="span-all create-series-scheduling">
+                <p class="form-block-title">Schedule</p>
+                <div class="create-series-scheduling-grid">
+                    <label>
+                        Time
+                        <input name="recurrence_time" type="time" value="09:00" required />
+                    </label>
+                    <label class="span-2">
+                        Time zone
+                        <select id="recurrence-timezone" name="recurrence_timezone" required>
+                            {% set selected_tz = current_user.timezone if current_user and current_user.timezone else
+                            "UTC" %}
+                            {% set ns = namespace(found=false) %}
+                            {% for tz_value, tz_label in timezone_options %}
+                            {% if tz_value == selected_tz %}{% set ns.found = true %}{% endif %}
+                            <option value="{{ tz_value }}" {% if tz_value==selected_tz %}selected{% endif %}>{{
+                                tz_label }}</option>
+                            {% endfor %}
+                            {% if selected_tz and not ns.found %}
+                            <option value="{{ selected_tz }}" selected>{{ selected_tz }} (custom)</option>
+                            {% endif %}
+                        </select>
+                    </label>
+                    <label>
+                        Starts on
+                        <input name="recurrence_start_date" type="date" required />
+                    </label>
+                    <label>
+                        Pre-create upcoming meetings
+                        <input class="input-compact" name="generate_count" type="number" min="1" max="200" value="10"
+                            required />
+                        <small>How many future meetings to create now.</small>
+                    </label>
+                    <label>
+                        Reminder lead (minutes)
+                        <input name="reminder_minutes_before" type="number" min="0" max="43200" value="60" required />
+                    </label>
+                </div>
+            </div>
             <div class="span-all">
-                <label for="attendee-emails">Attendees</label>
+                <label for="attendee-query">Attendees</label>
+                <input id="attendee-emails" name="attendee_emails" type="hidden" value="" />
+                <div id="selected-attendees" class="attendee-chip-list" aria-live="polite"></div>
                 <div class="typeahead">
-                    <input id="attendee-emails" name="attendee_emails" type="text"
-                        placeholder="Start typing name or email; separate with commas"
-                        hx-get="/series/attendee-suggestions" hx-trigger="keyup changed delay:250ms"
-                        hx-target="#attendee-suggestions" hx-swap="innerHTML"
+                    <input id="attendee-query" name="q" type="text"
+                        placeholder="Start typing name or email to add attendees" hx-get="/series/attendee-suggestions"
+                        hx-trigger="keyup changed delay:250ms" hx-target="#attendee-suggestions" hx-swap="innerHTML"
+                        hx-include="#attendee-emails"
                         onblur="window.setTimeout(() => window.agendableClearAttendeeSuggestions(), 120)"
                         autocomplete="off" />
                     <div id="attendee-suggestions" class="typeahead-panel">
@@ -83,7 +93,9 @@
                 </div>
             </div>
 
-            <button type="submit">Create</button>
+            <div class="span-all create-series-actions">
+                <button type="submit">Create series</button>
+            </div>
         </form>
     </section>
 
@@ -107,6 +119,66 @@
 <script>
     (() => {
         let attendeeSuggestionIndex = -1;
+
+        const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+
+        const attendeesHiddenInput = document.getElementById("attendee-emails");
+        const attendeesQueryInput = document.getElementById("attendee-query");
+        const attendeeChipList = document.getElementById("selected-attendees");
+        const selectedAttendeeEmails = new Set(
+            String(attendeesHiddenInput?.value || "")
+                .split(",")
+                .map((value) => normalizeEmail(value))
+                .filter((value) => value.length > 0)
+        );
+        const selectedAttendeeLabels = new Map(
+            Array.from(selectedAttendeeEmails).map((email) => [email, email])
+        );
+
+        const syncAttendeeEmailsValue = () => {
+            if (!(attendeesHiddenInput instanceof HTMLInputElement)) {
+                return;
+            }
+            attendeesHiddenInput.value = Array.from(selectedAttendeeEmails).join(", ");
+        };
+
+        const renderAttendeeChips = () => {
+            if (!(attendeeChipList instanceof HTMLElement)) {
+                return;
+            }
+
+            attendeeChipList.innerHTML = "";
+            for (const email of selectedAttendeeEmails) {
+                const chip = document.createElement("span");
+                chip.className = "attendee-chip";
+
+                const label = document.createElement("span");
+                label.className = "attendee-chip-label";
+                label.textContent = selectedAttendeeLabels.get(email) || email;
+                chip.appendChild(label);
+
+                const removeButton = document.createElement("button");
+                removeButton.type = "button";
+                removeButton.className = "attendee-chip-remove";
+                removeButton.dataset.attendeeEmail = email;
+                removeButton.setAttribute("aria-label", `Remove ${email}`);
+                removeButton.textContent = "Remove";
+                chip.appendChild(removeButton);
+
+                attendeeChipList.appendChild(chip);
+            }
+        };
+
+        window.agendableRemoveAttendeeEmail = (email) => {
+            const normalizedEmail = normalizeEmail(email);
+            if (!normalizedEmail) {
+                return;
+            }
+            selectedAttendeeEmails.delete(normalizedEmail);
+            selectedAttendeeLabels.delete(normalizedEmail);
+            syncAttendeeEmailsValue();
+            renderAttendeeChips();
+        };
 
         const getAttendeeSuggestionButtons = () => {
             const container = document.getElementById("attendee-suggestions");
@@ -137,37 +209,43 @@
             attendeeSuggestionIndex = -1;
         };
 
-        window.agendableAddAttendeeEmail = (email) => {
-            const attendeesInput = document.getElementById("attendee-emails");
+        window.agendableAddAttendeeEmail = (email, label = null) => {
             const suggestions = document.getElementById("attendee-suggestions");
-            if (!attendeesInput) return;
-
-            const normalizedEmail = String(email).toLowerCase();
-            const existing = attendeesInput.value
-                .split(",")
-                .map((value) => value.trim().toLowerCase())
-                .filter((value) => value.length > 0);
-
-            const isDuplicate = existing.includes(normalizedEmail);
-
-            if (!isDuplicate) {
-                const pieces = attendeesInput.value.split(",");
-                pieces[pieces.length - 1] = ` ${normalizedEmail}`;
-                attendeesInput.value = pieces
-                    .map((value) => value.trim())
-                    .filter((value) => value.length > 0)
-                    .join(", ");
+            const normalizedEmail = normalizeEmail(email);
+            if (!normalizedEmail) {
+                return;
             }
 
-            attendeesInput.value = attendeesInput.value.replace(/\s*,\s*/g, ", ");
-            if (attendeesInput.value && !attendeesInput.value.endsWith(", ")) {
-                attendeesInput.value = `${attendeesInput.value}, `;
+            const normalizedLabel = String(label || "").trim();
+            if (!selectedAttendeeEmails.has(normalizedEmail)) {
+                selectedAttendeeEmails.add(normalizedEmail);
+            }
+            selectedAttendeeLabels.set(normalizedEmail, normalizedLabel || normalizedEmail);
+            syncAttendeeEmailsValue();
+            renderAttendeeChips();
+
+            if (attendeesQueryInput instanceof HTMLInputElement) {
+                attendeesQueryInput.value = "";
+                attendeesQueryInput.focus();
             }
 
-            attendeesInput.focus();
             if (suggestions) {
                 suggestions.innerHTML = "";
             }
+        };
+
+        const addTypedAttendeeQuery = () => {
+            if (!(attendeesQueryInput instanceof HTMLInputElement)) {
+                return false;
+            }
+
+            const candidate = normalizeEmail(attendeesQueryInput.value.replace(/,$/, ""));
+            if (!candidate || !candidate.includes("@")) {
+                return false;
+            }
+
+            window.agendableAddAttendeeEmail(candidate, candidate);
+            return true;
         };
 
         document.addEventListener("pointerdown", (event) => {
@@ -187,17 +265,32 @@
                 return;
             }
 
-            window.agendableAddAttendeeEmail(email);
+            const label = button.dataset.attendeeLabel || email;
+            window.agendableAddAttendeeEmail(email, label);
         });
 
-        const attendeesInput = document.getElementById("attendee-emails");
-        if (attendeesInput instanceof HTMLInputElement) {
-            attendeesInput.addEventListener("keydown", (event) => {
+        if (attendeesQueryInput instanceof HTMLInputElement) {
+            attendeesQueryInput.addEventListener("keydown", (event) => {
                 const buttons = getAttendeeSuggestionButtons();
                 if (buttons.length == 0) {
                     if (event.key === "Escape") {
                         window.agendableClearAttendeeSuggestions();
                     }
+
+                    if (event.key === "Enter" || event.key === ",") {
+                        if (addTypedAttendeeQuery()) {
+                            event.preventDefault();
+                        }
+                    }
+
+                    if (event.key === "Backspace" && !attendeesQueryInput.value && selectedAttendeeEmails.size > 0) {
+                        const lastEmail = Array.from(selectedAttendeeEmails).at(-1);
+                        if (lastEmail) {
+                            window.agendableRemoveAttendeeEmail(lastEmail);
+                            event.preventDefault();
+                        }
+                    }
+
                     return;
                 }
 
@@ -226,8 +319,18 @@
                         event.preventDefault();
                         const email = buttons[attendeeSuggestionIndex].dataset.attendeeEmail;
                         if (email) {
-                            window.agendableAddAttendeeEmail(email);
+                            const label = buttons[attendeeSuggestionIndex].dataset.attendeeLabel || email;
+                            window.agendableAddAttendeeEmail(email, label);
                         }
+                    } else if (addTypedAttendeeQuery()) {
+                        event.preventDefault();
+                    }
+                    return;
+                }
+
+                if (event.key === ",") {
+                    if (addTypedAttendeeQuery()) {
+                        event.preventDefault();
                     }
                     return;
                 }
@@ -238,6 +341,25 @@
                 }
             });
         }
+
+        document.addEventListener("click", (event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+
+            const removeButton = target.closest(".attendee-chip-remove[data-attendee-email]");
+            if (!(removeButton instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            event.preventDefault();
+            const email = removeButton.dataset.attendeeEmail;
+            if (!email) {
+                return;
+            }
+            window.agendableRemoveAttendeeEmail(email);
+        });
 
         document.body.addEventListener("htmx:afterSwap", (event) => {
             const target = event.target;
@@ -257,6 +379,9 @@
         if (hasSystemTz && (!tzInput.value || tzInput.value === "UTC")) {
             tzInput.value = systemTz;
         }
+
+        syncAttendeeEmailsValue();
+        renderAttendeeChips();
     })();
 </script>
 {% endblock %}

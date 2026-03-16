@@ -97,8 +97,96 @@ label.inline {
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
+.form-grid>* {
+    min-width: 0;
+}
+
 .span-all {
     grid-column: 1 / -1;
+}
+
+.span-2 {
+    grid-column: span 2;
+}
+
+.input-compact {
+    max-width: 8rem;
+}
+
+.create-series-form {
+    gap: 0.85rem;
+}
+
+.form-block-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.create-series-scheduling {
+    border: 1px solid var(--border);
+    border-radius: 0.65rem;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.65rem;
+}
+
+.create-series-scheduling-grid {
+    display: grid;
+    gap: 0.75rem;
+    align-items: end;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.create-series-scheduling-grid>* {
+    min-width: 0;
+}
+
+.create-series-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.create-series-actions button {
+    min-width: 10.5rem;
+}
+
+.attendee-chip-list {
+    display: grid;
+    gap: 0.45rem;
+    min-height: 0;
+    margin-bottom: 0.45rem;
+}
+
+.attendee-chip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 0.65rem;
+    padding: 0.35rem 0.55rem;
+    background: color-mix(in oklab, var(--link) 8%, var(--control-bg));
+    font-size: 0.85rem;
+}
+
+.attendee-chip-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.attendee-chip-remove {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.attendee-chip-remove:hover {
+    background: color-mix(in oklab, var(--danger) 10%, transparent);
+    color: var(--danger);
 }
 
 .options-row {
@@ -328,6 +416,19 @@ label.inline {
     .inline-form {
         display: grid;
         grid-template-columns: 1fr;
+    }
+
+    .span-2 {
+        grid-column: 1 / -1;
+    }
+
+    .create-series-actions {
+        justify-content: stretch;
+    }
+
+    .create-series-actions button {
+        width: 100%;
+        min-width: 0;
     }
 }
 

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 import agendable.db as db
-from agendable import cli
+from agendable.cli import calendar_sync as cli
 
 
 class _FakeSessionContext:
@@ -49,7 +49,7 @@ async def test_run_google_calendar_sync_is_noop_when_feature_disabled(
         ),
     )
 
-    synced = await cli._run_google_calendar_sync()
+    synced = await cli.run_google_calendar_sync()
     assert synced == 0
 
 
@@ -78,6 +78,6 @@ async def test_run_google_calendar_sync_executes_when_enabled(
 
     monkeypatch.setattr(cli, "GoogleCalendarSyncService", _capture_sync_service)
 
-    synced = await cli._run_google_calendar_sync()
+    synced = await cli.run_google_calendar_sync()
     assert synced == 7
     assert captured.get("settings") is settings

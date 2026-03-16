@@ -5,7 +5,7 @@ import logging
 
 import pytest
 
-from agendable import cli
+from agendable.cli import calendar_sync, reminders
 
 
 @pytest.mark.asyncio
@@ -28,12 +28,12 @@ async def test_google_calendar_sync_worker_logs_iteration_complete(
     ) -> None:
         captured.append((message, fields))
 
-    monkeypatch.setattr(cli, "_run_google_calendar_sync", _fake_run)
+    monkeypatch.setattr(calendar_sync, "run_google_calendar_sync", _fake_run)
     monkeypatch.setattr(asyncio, "sleep", _cancel_sleep)
-    monkeypatch.setattr(cli, "log_with_fields", _capture_log_with_fields)
+    monkeypatch.setattr(calendar_sync, "log_with_fields", _capture_log_with_fields)
 
     with pytest.raises(asyncio.CancelledError):
-        await cli._run_google_calendar_sync_worker(30)
+        await calendar_sync.run_google_calendar_sync_worker(30)
 
     assert any(
         msg == "google calendar sync worker iteration complete"
@@ -62,13 +62,13 @@ async def test_google_calendar_sync_worker_survives_exception(
     ) -> None:
         captured.append((message, fields))
 
-    monkeypatch.setattr(cli, "_run_google_calendar_sync", _boom)
+    monkeypatch.setattr(calendar_sync, "run_google_calendar_sync", _boom)
     monkeypatch.setattr(asyncio, "sleep", _cancel_sleep)
-    monkeypatch.setattr(cli, "log_with_fields", _capture_log_with_fields)
+    monkeypatch.setattr(calendar_sync, "log_with_fields", _capture_log_with_fields)
 
     caplog.set_level(logging.ERROR)
     with pytest.raises(asyncio.CancelledError):
-        await cli._run_google_calendar_sync_worker(30)
+        await calendar_sync.run_google_calendar_sync_worker(30)
 
     assert any(
         "google calendar sync worker iteration failed" in r.getMessage() for r in caplog.records
@@ -98,11 +98,11 @@ async def test_reminders_worker_logs_iteration_complete(monkeypatch: pytest.Monk
     ) -> None:
         captured.append((message, fields))
 
-    monkeypatch.setattr(cli, "_run_due_reminders", _fake_run_due)
+    monkeypatch.setattr(reminders, "run_due_reminders", _fake_run_due)
     monkeypatch.setattr(asyncio, "sleep", _cancel_sleep)
-    monkeypatch.setattr(cli, "log_with_fields", _capture_log_with_fields)
+    monkeypatch.setattr(reminders, "log_with_fields", _capture_log_with_fields)
 
     with pytest.raises(asyncio.CancelledError):
-        await cli._run_reminders_worker(30)
+        await reminders.run_reminders_worker(30)
 
     assert any(msg == "reminders worker iteration complete" for msg, _ in captured)

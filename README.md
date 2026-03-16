@@ -69,6 +69,7 @@ For a production-oriented GCP deployment (Cloud Run web service, Cloud Run remin
 ### CLI
 
 - Initialize DB (creates tables): `uv run agendable init-db`
+- Seed deterministic local dev data: `uv run agendable seed-dev-data --reset`
 - Run reminder sender stub: `uv run agendable run-reminders`
 - Run one-shot Google calendar sync (enabled connections): `uv run agendable run-google-calendar-sync`
 - Run Google calendar sync worker loop: `uv run agendable run-google-calendar-sync-worker`

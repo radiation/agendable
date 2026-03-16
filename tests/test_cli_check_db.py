@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import importlib
 import sys
 from typing import Any
 
 import pytest
 
 import agendable.db as db
-from agendable import cli
+from agendable.cli import db as cli_db
 from agendable.settings import Settings
 
 
@@ -42,15 +43,17 @@ async def test_check_db_executes_select_1(monkeypatch: pytest.MonkeyPatch) -> No
     captured: list[object] = []
     monkeypatch.setattr(db, "engine", _FakeEngine(captured))
 
-    await cli._check_db(timeout_seconds=0.5)
+    await cli_db.check_db(timeout_seconds=0.5)
 
     assert len(captured) == 1
     assert "SELECT 1" in str(captured[0]).upper()
 
 
 def test_main_check_db_exits_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    cli_main_module = importlib.import_module("agendable.cli.main")
+
     monkeypatch.setattr(
-        cli,
+        cli_main_module,
         "get_settings",
         lambda: Settings(
             reminder_worker_poll_seconds=60,
@@ -61,10 +64,10 @@ def test_main_check_db_exits_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch)
     async def _boom(*, timeout_seconds: float) -> None:
         raise RuntimeError("db is down")
 
-    monkeypatch.setattr(cli, "_check_db", _boom)
+    monkeypatch.setattr(cli_main_module, "check_db", _boom)
     monkeypatch.setattr(sys, "argv", ["agendable", "check-db"])
 
     with pytest.raises(SystemExit) as exc:
-        cli.main()
+        cli_main_module.main()
 
     assert exc.value.code == 1

@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 import agendable.db as db
-from agendable import cli
+from agendable.cli.seed import seed_dev_data
 from agendable.db.models import AgendaItem, MeetingOccurrence, MeetingSeries, Task, User
 
 
@@ -13,7 +13,7 @@ from agendable.db.models import AgendaItem, MeetingOccurrence, MeetingSeries, Ta
 async def test_seed_dev_data_creates_expected_records(test_engine: AsyncEngine) -> None:
     _ = test_engine
 
-    summary = await cli.seed_dev_data(reset=False, password="Password123!")
+    summary = await seed_dev_data(reset=False, password="Password123!")
 
     assert summary.reset_applied is False
     assert summary.users_created == 3
@@ -23,7 +23,7 @@ async def test_seed_dev_data_creates_expected_records(test_engine: AsyncEngine) 
     assert summary.agenda_items_created == 72
     assert summary.tasks_created == 72
 
-    second_summary = await cli.seed_dev_data(reset=False, password="Password123!")
+    second_summary = await seed_dev_data(reset=False, password="Password123!")
 
     assert second_summary.users_created == 0
     assert second_summary.series_created == 0
@@ -37,8 +37,8 @@ async def test_seed_dev_data_creates_expected_records(test_engine: AsyncEngine) 
 async def test_seed_dev_data_reset_rebuilds_seed_state(test_engine: AsyncEngine) -> None:
     _ = test_engine
 
-    await cli.seed_dev_data(reset=False, password="Password123!")
-    summary = await cli.seed_dev_data(reset=True, password="Password123!")
+    await seed_dev_data(reset=False, password="Password123!")
+    summary = await seed_dev_data(reset=True, password="Password123!")
 
     assert summary.reset_applied is True
     assert summary.users_created == 3

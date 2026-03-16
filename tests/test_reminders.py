@@ -7,9 +7,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import agendable.cli as reminder_cli
+import agendable.cli.reminders as reminder_cli
 import agendable.db as db
-from agendable.cli import _run_due_reminders
+from agendable.cli.reminders import run_due_reminders
 from agendable.db.models import (
     MeetingOccurrence,
     MeetingSeries,
@@ -132,7 +132,7 @@ async def test_run_due_reminders_sends_due_email_and_marks_sent(db_session: Asyn
     await db_session.commit()
 
     sender = CapturingSender(sent=[])
-    await _run_due_reminders(sender=sender)
+    await run_due_reminders(sender=sender)
 
     assert len(sender.sent) == 1
     sent_payload = sender.sent[0]
@@ -172,7 +172,7 @@ async def test_run_due_reminders_skips_non_email_channels(db_session: AsyncSessi
     await db_session.commit()
 
     sender = CapturingSender(sent=[])
-    await _run_due_reminders(sender=sender)
+    await run_due_reminders(sender=sender)
 
     assert sender.sent == []
 
@@ -209,7 +209,7 @@ async def test_run_due_reminders_transient_failure_schedules_retry(
     db_session.add(retry_reminder)
     await db_session.commit()
 
-    await _run_due_reminders(sender=TransientFailingSender(reason_code="smtp_unavailable"))
+    await run_due_reminders(sender=TransientFailingSender(reason_code="smtp_unavailable"))
 
     async with db.SessionMaker() as verify_session:
         refreshed = (
@@ -232,7 +232,7 @@ async def test_run_due_reminders_terminal_failure_marks_failed(
     db_session: AsyncSession,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    caplog.set_level("INFO", logger="agendable.cli")
+    caplog.set_level("INFO", logger="agendable.cli.reminders")
     occurrence = await _create_occurrence(
         db_session,
         email="owner-failed@example.com",
@@ -249,7 +249,7 @@ async def test_run_due_reminders_terminal_failure_marks_failed(
     db_session.add(failed_reminder)
     await db_session.commit()
 
-    await _run_due_reminders(sender=TerminalFailingSender(reason_code="smtp_auth_failed"))
+    await run_due_reminders(sender=TerminalFailingSender(reason_code="smtp_auth_failed"))
 
     async with db.SessionMaker() as verify_session:
         refreshed = (
@@ -294,7 +294,7 @@ async def test_run_due_reminders_stops_retrying_at_max_attempts(
     db_session.add(maxed_reminder)
     await db_session.commit()
 
-    await _run_due_reminders(sender=TransientFailingSender(reason_code="smtp_unavailable"))
+    await run_due_reminders(sender=TransientFailingSender(reason_code="smtp_unavailable"))
 
     async with db.SessionMaker() as verify_session:
         refreshed = (
@@ -332,10 +332,10 @@ async def test_run_due_reminders_skips_send_when_claim_not_acquired(
         _ = now
         return False
 
-    monkeypatch.setattr(reminder_cli, "_claim_reminder_attempt", fake_claim)
+    monkeypatch.setattr(reminder_cli, "claim_reminder_attempt", fake_claim)
 
     sender = CapturingSender(sent=[])
-    await _run_due_reminders(sender=sender)
+    await run_due_reminders(sender=sender)
 
     assert sender.sent == []
 

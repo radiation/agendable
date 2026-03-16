@@ -3,40 +3,86 @@
 {% block title %}Agendable — Dashboard{% endblock %}
 
 {% block content %}
-<section class="stack-lg">
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+
+<section class="stack-lg dashboard-root" x-data="{ focusUrgentMeetings: false }">
     <div class="section-title">
         <h2>Dashboard</h2>
+        <small>{{ dashboard_view.outstanding_task_count }} outstanding tasks</small>
     </div>
 
-    <section class="section-card">
-        <h3>Upcoming meetings</h3>
-        <ul class="list-clean">
-            {% for meeting in upcoming_meetings %}
-            <li>
-                <a href="/occurrences/{{ meeting.id }}">{{ meeting.series.title }}</a>
-                {% if meeting.external_event_mirrors %}
-                <small>(Imported)</small>
-                {% endif %}
-                <small>— {{ meeting.scheduled_at|format_dt(current_user.timezone) }}</small>
+    <section class="section-card dashboard-urgent">
+        <div class="section-title">
+            <h3>Immediate tasks</h3>
+            <small>Only your tasks, overdue or due in 3 days</small>
+        </div>
+
+        <ul class="list-clean dashboard-urgent-list">
+            {% for urgent in dashboard_view.urgent_tasks %}
+            <li class="dashboard-urgent-item">
+                <div class="dashboard-urgent-mainline">
+                    <span
+                        class="status-pill{% if urgent.is_overdue %} dashboard-pill-overdue{% else %} dashboard-pill-soon{% endif %}">
+                        {% if urgent.is_overdue %}Overdue{% else %}Due soon{% endif %}
+                    </span>
+                    <small>{{ urgent.task.due_at|format_dt(current_user.timezone) }}</small>
+                    <a href="/occurrences/{{ urgent.task.occurrence_id }}">{{ urgent.task.title }}</a>
+                    <small>Meeting: {{ urgent.meeting_title }}</small>
+                </div>
             </li>
             {% else %}
-            <li><em>No upcoming meetings.</em></li>
+            <li class="dashboard-urgent-item">
+                <em>No immediate tasks currently assigned to you.</em>
+            </li>
             {% endfor %}
         </ul>
     </section>
 
-    <section class="section-card">
-        <h3>Outstanding tasks</h3>
-        <ul class="list-clean">
-            {% for task in outstanding_tasks %}
-            <li>
-                {{ task.due_at|format_dt(current_user.timezone) }} —
-                <a href="/occurrences/{{ task.occurrence_id }}">{{ task.title }}</a>
-            </li>
+    <section class="section-card dashboard-meetings">
+        <div class="section-title">
+            <h3>Upcoming meetings</h3>
+            <label class="inline">
+                <input type="checkbox" x-model="focusUrgentMeetings" />
+                Show only meetings with urgent tasks
+            </label>
+        </div>
+
+        <div class="dashboard-meeting-grid">
+            {% for meeting in dashboard_view.upcoming_meeting_items %}
+            <article class="dashboard-meeting-card"
+                x-show="!focusUrgentMeetings || {{ 1 if meeting.has_urgent_tasks else 0 }}">
+                <div class="section-title">
+                    <a href="/occurrences/{{ meeting.occurrence.id }}"><strong>{{ meeting.occurrence.series.title
+                            }}</strong></a>
+                    {% if meeting.occurrence.external_event_mirrors %}
+                    <small>(Imported)</small>
+                    {% endif %}
+                </div>
+                <small>{{ meeting.occurrence.scheduled_at|format_dt(current_user.timezone) }}</small>
+                <div class="dashboard-meeting-meta">
+                    <span class="status-pill">{{ meeting.participant_count }} participants</span>
+                    <span class="status-pill">{{ meeting.open_task_count }} open tasks</span>
+                </div>
+
+                <ul class="list-clean dashboard-meeting-task-preview">
+                    {% for task in meeting.open_tasks_preview %}
+                    <li>
+                        <a href="/occurrences/{{ meeting.occurrence.id }}">{{ task.title }}</a>
+                        <small>due {{ task.due_at|format_dt(current_user.timezone) }}</small>
+                    </li>
+                    {% else %}
+                    <li><small>No open tasks for this meeting.</small></li>
+                    {% endfor %}
+                </ul>
+
+                {% if meeting.open_task_count > 3 %}
+                <small>+ {{ meeting.open_task_count - 3 }} more tasks in this meeting</small>
+                {% endif %}
+            </article>
             {% else %}
-            <li><em>No outstanding tasks.</em></li>
+            <em>No upcoming meetings.</em>
             {% endfor %}
-        </ul>
+        </div>
     </section>
 </section>
 {% endblock %}

@@ -22,23 +22,16 @@ async def dashboard(
 ) -> HTMLResponse:
     now = datetime.now(UTC)
 
-    upcoming_meetings = await dashboard_service.list_upcoming_meetings(
+    dashboard_view = await dashboard_service.get_dashboard_view(
         user_id=current_user.id,
         now=now,
-        limit=20,
-    )
-
-    outstanding_tasks = await dashboard_service.list_outstanding_tasks(
-        user_id=current_user.id,
-        limit=200,
     )
 
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
-            "upcoming_meetings": upcoming_meetings,
-            "outstanding_tasks": outstanding_tasks,
+            "dashboard_view": dashboard_view,
             "current_user": current_user,
         },
     )

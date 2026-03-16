@@ -221,6 +221,73 @@ label.inline {
     color: var(--muted);
 }
 
+.dashboard-root {
+    gap: 1.25rem;
+}
+
+.dashboard-urgent {
+    border-color: color-mix(in oklab, var(--link) 28%, var(--border));
+}
+
+.dashboard-urgent-list {
+    padding-left: 0;
+    list-style: none;
+}
+
+.dashboard-urgent-item {
+    border: 1px solid var(--border);
+    border-radius: 0.65rem;
+    padding: 0.7rem;
+}
+
+.dashboard-urgent-mainline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+}
+
+.dashboard-urgent-mainline a {
+    font-weight: 600;
+}
+
+.dashboard-pill-overdue {
+    border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+    color: var(--danger);
+}
+
+.dashboard-pill-soon {
+    border-color: color-mix(in oklab, var(--link) 42%, var(--border));
+    color: var(--link);
+}
+
+.dashboard-meetings {
+    gap: 1rem;
+}
+
+.dashboard-meeting-grid {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.dashboard-meeting-card {
+    border: 1px solid var(--border);
+    border-radius: 0.65rem;
+    padding: 0.8rem;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.dashboard-meeting-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.dashboard-meeting-task-preview {
+    padding-left: 1rem;
+}
+
 @media (max-width: 640px) {
     .inline-form {
         display: grid;

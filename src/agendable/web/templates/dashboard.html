@@ -49,36 +49,54 @@
 
         <div class="dashboard-meeting-grid">
             {% for meeting in dashboard_view.upcoming_meeting_items %}
-            <article class="dashboard-meeting-card"
+            <details class="dashboard-meeting-row"
                 x-show="!focusUrgentMeetings || {{ 1 if meeting.has_urgent_tasks else 0 }}">
-                <div class="section-title">
-                    <a href="/occurrences/{{ meeting.occurrence.id }}"><strong>{{ meeting.occurrence.series.title
-                            }}</strong></a>
-                    {% if meeting.occurrence.external_event_mirrors %}
-                    <small>(Imported)</small>
-                    {% endif %}
-                </div>
-                <small>{{ meeting.occurrence.scheduled_at|format_dt(current_user.timezone) }}</small>
-                <div class="dashboard-meeting-meta">
-                    <span class="status-pill">{{ meeting.participant_count }} participants</span>
-                    <span class="status-pill">{{ meeting.open_task_count }} open tasks</span>
-                </div>
+                <summary class="dashboard-meeting-summary">
+                    <span class="dashboard-meeting-summary-left">
+                        <a href="/occurrences/{{ meeting.occurrence.id }}"><strong>{{ meeting.occurrence.series.title
+                                }}</strong></a>
+                        {% if meeting.occurrence.external_event_mirrors %}
+                        <small>(Imported)</small>
+                        {% endif %}
+                        <small>{{ meeting.occurrence.scheduled_at|format_dt(current_user.timezone) }}</small>
+                    </span>
+                    <span class="dashboard-meeting-summary-right">
+                        <span class="status-pill">{{ meeting.participant_count }} participants</span>
+                        <span class="status-pill">{{ meeting.open_task_count }} open tasks</span>
+                    </span>
+                </summary>
 
-                <ul class="list-clean dashboard-meeting-task-preview">
-                    {% for task in meeting.open_tasks_preview %}
-                    <li>
-                        <a href="/occurrences/{{ meeting.occurrence.id }}">{{ task.title }}</a>
-                        <small>due {{ task.due_at|format_dt(current_user.timezone) }}</small>
-                    </li>
-                    {% else %}
-                    <li><small>No open tasks for this meeting.</small></li>
-                    {% endfor %}
-                </ul>
+                <div class="dashboard-meeting-quickview">
+                    <section class="dashboard-quickview-block">
+                        <h4>Agenda items</h4>
+                        <ul class="list-clean dashboard-quickview-list">
+                            {% set agenda_count = namespace(value=0) %}
+                            {% for item in meeting.occurrence.agenda_items if not item.is_done %}
+                            {% set agenda_count.value = agenda_count.value + 1 %}
+                            <li>{{ item.body }}</li>
+                            {% endfor %}
+                            {% if agenda_count.value == 0 %}
+                            <li><small>No open agenda items.</small></li>
+                            {% endif %}
+                        </ul>
+                    </section>
 
-                {% if meeting.open_task_count > 3 %}
-                <small>+ {{ meeting.open_task_count - 3 }} more tasks in this meeting</small>
-                {% endif %}
-            </article>
+                    <section class="dashboard-quickview-block">
+                        <h4>Assigned tasks</h4>
+                        <ul class="list-clean dashboard-quickview-list">
+                            {% for task in meeting.open_tasks %}
+                            <li>
+                                <a href="/occurrences/{{ meeting.occurrence.id }}">{{ task.title }}</a>
+                                <small>({{ task.assignee.display_name }}, due {{
+                                    task.due_at|format_dt(current_user.timezone) }})</small>
+                            </li>
+                            {% else %}
+                            <li><small>No open tasks for this meeting.</small></li>
+                            {% endfor %}
+                        </ul>
+                    </section>
+                </div>
+            </details>
             {% else %}
             <em>No upcoming meetings.</em>
             {% endfor %}

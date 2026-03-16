@@ -23,7 +23,7 @@ class DashboardMeetingItem:
     occurrence: MeetingOccurrence
     participant_count: int
     open_task_count: int
-    open_tasks_preview: list[Task]
+    open_tasks: list[Task]
     has_urgent_tasks: bool
 
 
@@ -98,7 +98,7 @@ class DashboardService:
                     occurrence=occurrence,
                     participant_count=1 + len(occurrence.attendees),
                     open_task_count=len(open_tasks),
-                    open_tasks_preview=open_tasks[:3],
+                    open_tasks=open_tasks,
                     has_urgent_tasks=has_urgent_tasks,
                 )
             )

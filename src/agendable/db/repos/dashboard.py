@@ -33,6 +33,7 @@ class DashboardRepository:
                 selectinload(MeetingOccurrence.series),
                 selectinload(MeetingOccurrence.external_event_mirrors),
                 selectinload(MeetingOccurrence.attendees),
+                selectinload(MeetingOccurrence.agenda_items),
             )
             .join(MeetingSeries, MeetingOccurrence.series_id == MeetingSeries.id)
             .outerjoin(

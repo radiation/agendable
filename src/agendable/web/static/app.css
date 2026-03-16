@@ -270,22 +270,58 @@ label.inline {
     gap: 0.8rem;
 }
 
-.dashboard-meeting-card {
+.dashboard-meeting-row {
     border: 1px solid var(--border);
     border-radius: 0.65rem;
-    padding: 0.8rem;
-    display: grid;
+    background: var(--control-bg);
+}
+
+.dashboard-meeting-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.75rem 0.85rem;
+    cursor: pointer;
+    list-style: none;
+}
+
+.dashboard-meeting-summary::-webkit-details-marker {
+    display: none;
+}
+
+.dashboard-meeting-summary-left,
+.dashboard-meeting-summary-right {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 0.55rem;
 }
 
-.dashboard-meeting-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+.dashboard-meeting-quickview {
+    border-top: 1px solid var(--border);
+    padding: 0.75rem 0.85rem 0.85rem;
+    display: grid;
+    gap: 0.8rem;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
 }
 
-.dashboard-meeting-task-preview {
+.dashboard-quickview-block {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.dashboard-quickview-block h4 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.dashboard-quickview-list {
+    margin: 0;
     padding-left: 1rem;
+    display: grid;
+    gap: 0.35rem;
 }
 
 @media (max-width: 640px) {

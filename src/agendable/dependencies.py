@@ -109,10 +109,19 @@ def get_dashboard_service(
 
 
 def get_series_service(
+    session: AsyncSession = Depends(get_session),
     users: UserRepository = Depends(get_user_repo),
     attendees: MeetingOccurrenceAttendeeRepository = Depends(get_meeting_occurrence_attendee_repo),
+    series: MeetingSeriesRepository = Depends(get_meeting_series_repo),
+    occurrences: MeetingOccurrenceRepository = Depends(get_meeting_occurrence_repo),
 ) -> SeriesService:
-    return SeriesService(users=users, attendees=attendees)
+    return SeriesService(
+        session=session,
+        users=users,
+        attendees=attendees,
+        series=series,
+        occurrences=occurrences,
+    )
 
 
 def get_google_imported_series_service(

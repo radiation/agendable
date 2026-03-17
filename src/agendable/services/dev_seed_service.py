@@ -16,7 +16,7 @@ from agendable.db.repos import (
     TaskRepository,
     UserRepository,
 )
-from agendable.services.series_service import create_series_with_occurrences
+from agendable.services.series_service import SeriesService
 from agendable.settings import Settings
 
 
@@ -88,6 +88,13 @@ class DevSeedService:
         self.attendees = attendees or MeetingOccurrenceAttendeeRepository(session)
         self.agenda_items = agenda_items or AgendaItemRepository(session)
         self.tasks = tasks or TaskRepository(session)
+        self.series_service = SeriesService(
+            session=session,
+            users=self.users,
+            attendees=self.attendees,
+            series=self.series,
+            occurrences=self.occurrences,
+        )
 
     async def seed(
         self,
@@ -177,8 +184,7 @@ class DevSeedService:
         )
 
         if existing_series is None:
-            _, created_occurrences = await create_series_with_occurrences(
-                self.session,
+            _, created_occurrences = await self.series_service.create_series_with_occurrences(
                 owner_user_id=owner.id,
                 title=series_spec.title,
                 reminder_minutes_before=series_spec.reminder_minutes_before,

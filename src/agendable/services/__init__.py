@@ -27,7 +27,6 @@ from agendable.services.oidc_service import (
 )
 from agendable.services.reminder_claim_service import claim_reminder_attempt
 from agendable.services.reminder_delivery_service import run_due_reminders
-from agendable.services.series_service import create_series_with_occurrences
 
 __all__ = [
     "CalendarEventMappingService",
@@ -45,7 +44,6 @@ __all__ = [
     "OidcLoginResolution",
     "claim_reminder_attempt",
     "complete_occurrence_and_roll_forward",
-    "create_series_with_occurrences",
     "provision_user_for_oidc",
     "resolve_oidc_link_resolution",
     "resolve_oidc_login_resolution",

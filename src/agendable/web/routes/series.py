@@ -10,16 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user
-from agendable.db.models import MeetingOccurrence, User
-from agendable.db.repos import (
-    MeetingOccurrenceRepository,
-    MeetingSeriesRepository,
-)
+from agendable.db.models import User
 from agendable.dependencies import get_series_service, get_session
 from agendable.logging_config import log_with_fields
-from agendable.reminders import build_default_email_reminder
-from agendable.services import create_series_with_occurrences
-from agendable.services.series_service import SeriesService, UnknownAttendeeEmailsError
+from agendable.services.series_service import (
+    SeriesNotFoundError,
+    SeriesService,
+    UnknownAttendeeEmailsError,
+)
 from agendable.settings import get_settings
 from agendable.web.routes.common import (
     parse_date,
@@ -30,10 +28,8 @@ from agendable.web.routes.common import (
     templates,
 )
 from agendable.web.routes.series_helpers import (
-    add_missing_attendee_links,
     autocomplete_needle,
     build_normalized_rrule,
-    existing_attendee_occurrence_ids,
     get_owned_series_or_404,
     normalize_recurrence_freq,
     parse_attendee_emails,
@@ -48,14 +44,17 @@ logger = logging.getLogger("agendable.series")
 
 
 @router.get("/", response_class=Response)
-async def index(request: Request, session: AsyncSession = Depends(get_session)) -> Response:
+async def index(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    series_service: SeriesService = Depends(get_series_service),
+) -> Response:
     try:
         current_user = await require_user(request, session)
     except HTTPException:
         return RedirectResponse(url="/login", status_code=303)
 
-    series_repo = MeetingSeriesRepository(session)
-    series = await series_repo.list_for_owner(current_user.id)
+    series = await series_service.list_series_for_owner(current_user.id)
     series_recurrence = {
         s.id: recurrence_label(
             recurrence_rrule=s.recurrence_rrule,
@@ -137,7 +136,6 @@ async def create_series(
     monthly_bysetpos: list[int] = Form([]),
     attendee_emails: str = Form(""),
     generate_count: int = Form(10),
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
     series_service: SeriesService = Depends(get_series_service),
 ) -> RedirectResponse:
@@ -166,9 +164,9 @@ async def create_series(
     )
 
     settings = get_settings()
+    parsed_attendee_emails = parse_attendee_emails(attendee_emails)
     try:
-        series, occurrences = await create_series_with_occurrences(
-            session,
+        series, occurrences, attendee_user_ids = await series_service.create_series_for_owner(
             owner_user_id=current_user.id,
             title=title,
             reminder_minutes_before=reminder_minutes_before,
@@ -176,26 +174,13 @@ async def create_series(
             recurrence_dtstart=dtstart,
             recurrence_timezone=recurrence_timezone,
             generate_count=generate_count,
-            settings=settings,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    parsed_attendee_emails = parse_attendee_emails(attendee_emails)
-    try:
-        attendee_user_ids = await series_service.resolve_attendee_user_ids(
             attendee_emails=parsed_attendee_emails,
-            owner_user_id=current_user.id,
+            settings=settings,
         )
     except UnknownAttendeeEmailsError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    await series_service.link_attendees_to_occurrences(
-        occurrences=occurrences,
-        attendee_user_ids=attendee_user_ids,
-    )
-
-    await session.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     log_with_fields(
         logger,
@@ -235,6 +220,7 @@ async def add_series_attendee(
     email: str = Form(...),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    series_service: SeriesService = Depends(get_series_service),
 ) -> Response:
     await get_owned_series_or_404(session, series_id, current_user.id)
 
@@ -265,20 +251,9 @@ async def add_series_attendee(
     if attendee_user is None:
         raise HTTPException(status_code=400, detail="Invalid attendee")
 
-    occ_repo = MeetingOccurrenceRepository(session)
-    occurrences = await occ_repo.list_for_series(series_id)
-    occurrence_ids = [occ.id for occ in occurrences]
-
-    existing_occurrence_ids = await existing_attendee_occurrence_ids(
-        session=session,
+    added_count = await series_service.add_attendee_to_series_occurrences(
+        series_id=series_id,
         attendee_user_id=attendee_user.id,
-        occurrence_ids=occurrence_ids,
-    )
-    added_count = await add_missing_attendee_links(
-        session=session,
-        attendee_user_id=attendee_user.id,
-        occurrence_ids=occurrence_ids,
-        existing_occurrence_ids=existing_occurrence_ids,
     )
 
     if added_count > 0:
@@ -305,30 +280,19 @@ async def create_occurrence(
     request: Request,
     series_id: uuid.UUID,
     scheduled_at: str = Form(...),
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    series_service: SeriesService = Depends(get_series_service),
 ) -> RedirectResponse:
-    series_repo = MeetingSeriesRepository(session)
-    series = await series_repo.get_for_owner(series_id, current_user.id)
-    if series is None:
-        raise HTTPException(status_code=404)
-
-    occ = MeetingOccurrence(series_id=series_id, scheduled_at=parse_dt(scheduled_at), notes="")
-    session.add(occ)
-    await session.flush()
-
     settings = get_settings()
-    if settings.enable_default_email_reminders:
-        session.add(
-            build_default_email_reminder(
-                occurrence_id=occ.id,
-                occurrence_scheduled_at=occ.scheduled_at,
-                settings=settings,
-                lead_minutes_before=series.reminder_minutes_before,
-            )
+    try:
+        occ = await series_service.create_occurrence_for_owner(
+            owner_user_id=current_user.id,
+            series_id=series_id,
+            scheduled_at=parse_dt(scheduled_at),
+            settings=settings,
         )
-
-    await session.commit()
+    except SeriesNotFoundError as exc:
+        raise HTTPException(status_code=404) from exc
 
     log_with_fields(
         logger,

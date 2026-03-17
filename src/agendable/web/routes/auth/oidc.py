@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -10,14 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user, verify_password
-from agendable.db import get_session
 from agendable.db.models import (
     CalendarProvider,
     User,
 )
 from agendable.db.repos import ExternalCalendarConnectionRepository, ExternalIdentityRepository
+from agendable.dependencies import (
+    get_google_calendar_sync_service,
+    get_google_imported_series_service,
+    get_session,
+)
 from agendable.logging_config import log_with_fields
-from agendable.providers import build_google_calendar_sync_service
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
     OIDC_EVENT_CALLBACK,
@@ -29,7 +31,6 @@ from agendable.security.audit_constants import (
     OIDC_REASON_PROVIDER_DISABLED,
     OIDC_REASON_RATE_LIMITED,
 )
-from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.google_imported_series_service import (
     GoogleImportedSeriesService,
@@ -41,9 +42,6 @@ from agendable.sso.oidc.flow import (
     build_authorize_params,
     get_oidc_link_user_id,
     set_oidc_link_user_id,
-)
-from agendable.web.dependencies import (
-    get_google_imported_series_service,
 )
 from agendable.web.routes import auth as auth_routes
 from agendable.web.routes.auth.oidc_callbacks import (
@@ -59,25 +57,6 @@ from agendable.web.routes.auth.rate_limits import is_identity_link_start_rate_li
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
-
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-
-def build_google_calendar_client() -> GoogleCalendarHttpClient:
-    settings = get_settings()
-    return GoogleCalendarHttpClient(
-        api_base_url=settings.google_calendar_api_base_url,
-        initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
-    )
-
-
-def get_google_calendar_sync_service(session: SessionDep) -> GoogleCalendarSyncService:
-    settings = get_settings()
-    return build_google_calendar_sync_service(
-        session=session,
-        settings=settings,
-        calendar_client=build_google_calendar_client(),
-    )
 
 
 @router.get("/auth/oidc/start", response_class=RedirectResponse)

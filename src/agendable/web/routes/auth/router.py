@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import hash_password, require_user, verify_password
-from agendable.db import get_session
 from agendable.db.models import (
     CalendarProvider,
     ImportedSeriesDecision,
@@ -25,6 +24,7 @@ from agendable.db.repos import (
     ExternalIdentityRepository,
     UserRepository,
 )
+from agendable.dependencies import get_session
 from agendable.security.audit import audit_auth_denied, audit_auth_success
 from agendable.security.audit_constants import (
     AUTH_EVENT_LOGOUT,

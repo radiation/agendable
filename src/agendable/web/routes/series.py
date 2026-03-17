@@ -11,13 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user
-from agendable.db import get_session
 from agendable.db.models import MeetingOccurrence, User
 from agendable.db.repos import (
     MeetingOccurrenceAttendeeRepository,
     MeetingOccurrenceRepository,
     MeetingSeriesRepository,
 )
+from agendable.dependencies import get_session
 from agendable.logging_config import log_with_fields
 from agendable.reminders import build_default_email_reminder
 from agendable.services import create_series_with_occurrences

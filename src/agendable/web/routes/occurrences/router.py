@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user
-from agendable.db import get_session
 from agendable.db.models import (
     AgendaItem,
     Task,
@@ -23,6 +22,7 @@ from agendable.db.repos import (
     TaskRepository,
     UserRepository,
 )
+from agendable.dependencies import get_session
 from agendable.logging_config import log_with_fields
 from agendable.services import complete_occurrence_and_roll_forward
 from agendable.web.routes.common import templates

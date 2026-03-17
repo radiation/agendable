@@ -74,6 +74,9 @@ ignore = [
 "src/agendable/auth.py" = [
 	"B008", # FastAPI's Depends(...) is the intended pattern in dependency signatures
 ]
+"src/agendable/dependencies.py" = [
+	"B008", # FastAPI Depends(...) defaults are intentional in DI provider functions
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["agendable"]

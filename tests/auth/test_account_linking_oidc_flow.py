@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.auth import hash_password
 from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User, UserRole
-from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import seams as auth_seams
 from tests.auth.account_linking_test_helpers import (
     FakeOidcLinkClient,
     enable_oidc_env,
@@ -38,7 +38,7 @@ async def test_profile_link_flow_links_identity_after_oidc_callback(
             "email_verified": True,
         }
     )
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     start = await client.post(
         "/profile/identities/link/start",
@@ -89,7 +89,7 @@ async def test_profile_link_callback_rejects_email_mismatch(
             "email_verified": True,
         }
     )
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     start = await client.post(
         "/profile/identities/link/start",
@@ -160,7 +160,7 @@ async def test_profile_link_callback_rejects_identity_linked_to_other_user(
             "email_verified": True,
         }
     )
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     start = await client.post(
         "/profile/identities/link/start",
@@ -208,7 +208,7 @@ async def test_profile_link_callback_handles_deleted_linking_user(
             "email_verified": True,
         }
     )
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     start = await client.post(
         "/profile/identities/link/start",
@@ -286,7 +286,7 @@ async def test_profile_link_flow_captures_google_calendar_connection_when_scope_
             "id_token": "id-token",
         },
     )
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     start = await client.post(
         "/profile/identities/link/start",

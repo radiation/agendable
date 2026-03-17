@@ -41,6 +41,10 @@ For local OIDC testing and multi-user flows, see the Keycloak setup in `README.m
 - If logic answers "what should happen," it belongs in a service. If it answers "how data is stored/fetched," it belongs in a repository.
 
 ## Before opening a PR
+For auth/OIDC seam and route-layering changes, a fast local check is:
+
+- `uv run sh -c 'ruff check . && mypy --strict src && pytest -q tests/architecture/test_route_layering.py tests/test_web_smoke.py tests/auth/test_oidc_start.py tests/auth/test_account_linking_oidc_flow.py tests/auth/test_account_linking_profile.py tests/auth/test_oidc_autoprovision.py tests/auth/test_google_calendar_sync_trigger.py'`
+
 Run the same checks CI enforces:
 
 - `uv run ruff check .`

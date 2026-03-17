@@ -31,7 +31,6 @@ from agendable.security.audit_constants import (
     OIDC_REASON_RATE_LIMITED,
 )
 from agendable.services.auth_service import AuthService
-from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import (
     GoogleCalendarConnectionNotFoundError,
     GoogleCalendarSyncService,
@@ -53,6 +52,7 @@ from agendable.sso.oidc.flow import (
     set_oidc_link_user_id,
 )
 from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import seams as auth_seams
 from agendable.web.routes.auth.oidc_callbacks import (
     auth_oidc_enabled,
     auth_oidc_oauth_client,
@@ -63,20 +63,9 @@ from agendable.web.routes.auth.oidc_callbacks import (
     rate_limit_block_response,
 )
 from agendable.web.routes.auth.rate_limits import is_identity_link_start_rate_limited
-from agendable.web.routes.auth.seams import (
-    keycloak_oidc_oauth_client as seam_keycloak_oidc_oauth_client,
-)
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
-
-
-def build_google_calendar_client() -> GoogleCalendarHttpClient:
-    settings = get_settings()
-    return GoogleCalendarHttpClient(
-        api_base_url=settings.google_calendar_api_base_url,
-        initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
-    )
 
 
 def get_google_calendar_sync_service(
@@ -86,7 +75,7 @@ def get_google_calendar_sync_service(
     return build_google_calendar_sync_service(
         session=session,
         settings=settings,
-        calendar_client=build_google_calendar_client(),
+        calendar_client=auth_seams.build_google_calendar_client(),
     )
 
 
@@ -121,7 +110,7 @@ async def oidc_start(request: Request) -> Response:
 @router.get("/auth/oidc/keycloak/start", response_class=RedirectResponse)
 async def keycloak_oidc_start(request: Request) -> Response:
     settings = get_settings()
-    if not auth_routes.keycloak_oidc_enabled():
+    if not auth_seams.keycloak_oidc_enabled():
         if settings.oidc_debug_logging:
             logger.info("Keycloak OIDC start aborted: provider is disabled")
         raise HTTPException(status_code=404)
@@ -135,7 +124,7 @@ async def keycloak_oidc_start(request: Request) -> Response:
             redirect_uri=redirect_uri,
         )
 
-    oidc_client = seam_keycloak_oidc_oauth_client()
+    oidc_client = auth_seams.keycloak_oidc_oauth_client()
     authorize_params = build_authorize_params(settings.oidc_auth_prompt)
     return await oidc_client.authorize_redirect(request, redirect_uri, **authorize_params)
 
@@ -229,7 +218,7 @@ async def keycloak_oidc_callback(
     debug_oidc = settings.oidc_debug_logging
     link_user_id = get_oidc_link_user_id(request)
 
-    if not auth_routes.keycloak_oidc_enabled():
+    if not auth_seams.keycloak_oidc_enabled():
         audit_oidc_denied(event=OIDC_EVENT_CALLBACK, reason=OIDC_REASON_PROVIDER_DISABLED)
         if debug_oidc:
             logger.info("Keycloak OIDC callback aborted: provider is disabled")
@@ -238,7 +227,7 @@ async def keycloak_oidc_callback(
     identity_or_response = await extract_oidc_identity_or_response(
         request,
         auth_service=auth_service,
-        oidc_client=seam_keycloak_oidc_oauth_client(),
+        oidc_client=auth_seams.keycloak_oidc_oauth_client(),
         debug_oidc=debug_oidc,
         link_user_id=link_user_id,
         session=session,
@@ -459,7 +448,7 @@ async def start_profile_identity_link(
 
     set_oidc_link_user_id(request, user.id)
     audit_oidc_success(event=OIDC_EVENT_IDENTITY_LINK_START, actor=user)
-    if auth_routes.keycloak_oidc_enabled():
+    if auth_seams.keycloak_oidc_enabled():
         return RedirectResponse(url="/auth/oidc/keycloak/start", status_code=303)
     return RedirectResponse(url="/auth/oidc/start", status_code=303)
 

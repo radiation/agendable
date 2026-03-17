@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.auth import hash_password
 from agendable.db.models import ExternalIdentity, User, UserRole
-from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import seams as auth_seams
 from tests.auth.account_linking_test_helpers import (
     enable_oidc_env,
     get_user_by_email,
@@ -226,7 +226,7 @@ async def test_profile_link_start_returns_404_when_oidc_disabled(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(auth_routes, "oidc_enabled", lambda: False)
+    monkeypatch.setattr(auth_seams, "oidc_enabled", lambda: False)
 
     await signup_and_login(
         client,

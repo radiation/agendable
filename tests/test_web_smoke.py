@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import seams as auth_seams
 
 
 @pytest.mark.asyncio
@@ -17,7 +17,7 @@ async def test_index_anonymous_redirects_to_login(client: AsyncClient) -> None:
 async def test_login_page_hides_oidc_when_disabled(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(auth_routes, "oidc_enabled", lambda: False)
+    monkeypatch.setattr(auth_seams, "oidc_enabled", lambda: False)
 
     resp = await client.get("/login")
     assert resp.status_code == 200
@@ -29,7 +29,7 @@ async def test_login_page_hides_oidc_when_disabled(
 async def test_profile_page_hides_oidc_link_when_disabled(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(auth_routes, "oidc_enabled", lambda: False)
+    monkeypatch.setattr(auth_seams, "oidc_enabled", lambda: False)
 
     await client.post(
         "/signup",

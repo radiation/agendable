@@ -50,22 +50,8 @@ from agendable.sso.oidc.flow import (
 from agendable.web.routes import auth as auth_routes
 from agendable.web.routes.auth.oidc_link_flow import render_link_error
 from agendable.web.routes.auth.rate_limits import is_oidc_callback_rate_limited
-from agendable.web.routes.auth.seams import (
-    oidc_enabled as seam_oidc_enabled,
-)
-from agendable.web.routes.auth.seams import (
-    oidc_oauth_client as seam_oidc_oauth_client,
-)
 
 logger = logging.getLogger("uvicorn.error")
-
-
-def auth_oidc_enabled() -> bool:
-    return seam_oidc_enabled()
-
-
-def auth_oidc_oauth_client() -> OidcClient:
-    return seam_oidc_oauth_client()
 
 
 def _login_redirect() -> RedirectResponse:

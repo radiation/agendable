@@ -21,7 +21,7 @@ from agendable.services.google_calendar_sync_service import (
     ExternalCalendarSyncBatch,
     ExternalRecurringEventDetails,
 )
-from agendable.web.routes.auth import oidc as oidc_routes
+from agendable.web.routes.auth import seams as auth_seams
 from tests.auth.account_linking_test_helpers import get_user_by_email, signup_and_login
 
 
@@ -131,7 +131,7 @@ async def test_google_calendar_sync_route_syncs_primary_connection(
 ) -> None:
     monkeypatch.setenv("AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED", "true")
     monkeypatch.setattr(
-        oidc_routes, "build_google_calendar_client", lambda: _FakeGoogleCalendarClient()
+        auth_seams, "build_google_calendar_client", lambda: _FakeGoogleCalendarClient()
     )
 
     await signup_and_login(

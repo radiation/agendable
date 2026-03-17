@@ -42,15 +42,15 @@ logger = logging.getLogger("uvicorn.error")
 
 
 def _auth_oidc_enabled() -> bool:
-    from agendable.web.routes import auth as auth_routes
+    from agendable.web.routes.auth import seams as auth_seams
 
-    return auth_routes.oidc_enabled()
+    return auth_seams.oidc_enabled()
 
 
 def _auth_keycloak_oidc_enabled() -> bool:
-    from agendable.web.routes import auth as auth_routes
+    from agendable.web.routes.auth import seams as auth_seams
 
-    return auth_routes.keycloak_oidc_enabled()
+    return auth_seams.keycloak_oidc_enabled()
 
 
 def is_bootstrap_admin_email(email: str) -> bool:

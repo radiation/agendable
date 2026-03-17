@@ -10,8 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User, UserRole
-from agendable.web.routes import auth as auth_routes
 from agendable.web.routes.auth import oidc_callback_flow
+from agendable.web.routes.auth import seams as auth_seams
 
 
 @dataclass
@@ -55,8 +55,8 @@ async def test_oidc_callback_autoprovisions_user_and_links_identity(
         "AGENDABLE_OIDC_METADATA_URL", "https://example.com/.well-known/openid-configuration"
     )
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-123",
@@ -123,8 +123,8 @@ async def test_oidc_callback_rejects_link_to_existing_password_account(
     await client.post("/logout", follow_redirects=True)
 
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-bob",
@@ -183,8 +183,8 @@ async def test_oidc_callback_links_existing_passwordless_account(
     await db_session.commit()
 
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-dana",
@@ -229,8 +229,8 @@ async def test_oidc_autoprovision_name_fallback_uses_email_localpart(
         "AGENDABLE_OIDC_METADATA_URL", "https://example.com/.well-known/openid-configuration"
     )
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-charlie",
@@ -263,8 +263,8 @@ async def test_oidc_callback_autoprovision_uses_timezone_cookie_when_valid(
         "AGENDABLE_OIDC_METADATA_URL", "https://example.com/.well-known/openid-configuration"
     )
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-tz",
@@ -296,8 +296,8 @@ async def test_oidc_callback_autoprovision_decodes_percent_encoded_timezone_cook
         "AGENDABLE_OIDC_METADATA_URL", "https://example.com/.well-known/openid-configuration"
     )
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-tz-encoded",
@@ -329,8 +329,8 @@ async def test_oidc_callback_autoprovision_ignores_timezone_cookie_when_invalid(
         "AGENDABLE_OIDC_METADATA_URL", "https://example.com/.well-known/openid-configuration"
     )
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-tz-invalid",
@@ -363,8 +363,8 @@ async def test_oidc_callback_rate_limit_blocks_repeated_attempts(
     monkeypatch.setenv("AGENDABLE_OIDC_CALLBACK_RATE_LIMIT_IP_ATTEMPTS", "1")
     monkeypatch.setenv("AGENDABLE_OIDC_CALLBACK_RATE_LIMIT_ACCOUNT_ATTEMPTS", "99")
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-rate-oidc",
@@ -395,8 +395,8 @@ async def test_oidc_callback_denies_disallowed_email_domain(
     monkeypatch.setenv("AGENDABLE_ALLOWED_EMAIL_DOMAIN", "example.com")
     monkeypatch.setenv("AGENDABLE_OIDC_DEBUG_LOGGING", "true")
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-domain-denied",
@@ -417,7 +417,7 @@ async def test_oidc_callback_returns_404_when_provider_disabled(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(auth_routes, "oidc_enabled", lambda: False)
+    monkeypatch.setattr(auth_seams, "oidc_enabled", lambda: False)
 
     response = await client.get("/auth/oidc/callback", follow_redirects=False)
     assert response.status_code == 404
@@ -444,8 +444,8 @@ async def test_oidc_callback_creates_google_calendar_connection_when_scope_grant
     )
     monkeypatch.setenv("AGENDABLE_GOOGLE_CALENDAR_SYNC_ENABLED", "true")
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-calendar-create",
@@ -535,8 +535,8 @@ async def test_oidc_callback_updates_google_calendar_connection_and_preserves_re
     await db_session.commit()
 
     monkeypatch.setattr(
-        auth_routes,
-        "_oidc_oauth_client",
+        auth_seams,
+        "oidc_oauth_client",
         lambda: _FakeOidcClient(
             {
                 "sub": "sub-calendar-update",

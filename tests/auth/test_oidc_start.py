@@ -6,7 +6,7 @@ import pytest
 from fastapi.responses import RedirectResponse
 from httpx import AsyncClient
 
-from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import seams as auth_seams
 
 
 @dataclass
@@ -39,7 +39,7 @@ async def test_oidc_start_defaults_to_select_account_prompt(
     )
 
     fake_client = _FakeOidcStartClient()
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     response = await client.get("/auth/oidc/start", follow_redirects=False)
     assert response.status_code == 302
@@ -60,7 +60,7 @@ async def test_oidc_start_omits_prompt_when_configured_empty(
     monkeypatch.setenv("AGENDABLE_OIDC_AUTH_PROMPT", "")
 
     fake_client = _FakeOidcStartClient()
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     response = await client.get("/auth/oidc/start", follow_redirects=False)
     assert response.status_code == 302
@@ -81,7 +81,7 @@ async def test_oidc_start_uses_configured_custom_prompt(
     monkeypatch.setenv("AGENDABLE_OIDC_AUTH_PROMPT", "login")
 
     fake_client = _FakeOidcStartClient()
-    monkeypatch.setattr(auth_routes, "_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "oidc_oauth_client", lambda: fake_client)
 
     response = await client.get("/auth/oidc/start", follow_redirects=False)
     assert response.status_code == 302
@@ -103,7 +103,7 @@ async def test_keycloak_oidc_start_uses_prompt(
     monkeypatch.setenv("AGENDABLE_OIDC_AUTH_PROMPT", "login")
 
     fake_client = _FakeOidcStartClient()
-    monkeypatch.setattr(auth_routes, "_keycloak_oidc_oauth_client", lambda: fake_client)
+    monkeypatch.setattr(auth_seams, "keycloak_oidc_oauth_client", lambda: fake_client)
 
     response = await client.get("/auth/oidc/keycloak/start", follow_redirects=False)
     assert response.status_code == 302

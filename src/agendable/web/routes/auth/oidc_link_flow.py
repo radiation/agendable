@@ -17,6 +17,7 @@ from agendable.security.audit_constants import (
     OIDC_REASON_ALREADY_LINKED_OTHER_USER,
     OIDC_REASON_EMAIL_MISMATCH,
 )
+from agendable.services.auth_service import AuthService
 from agendable.services.calendar_connection_service import (
     should_capture_google_calendar_token,
     upsert_google_primary_calendar_connection,
@@ -36,11 +37,11 @@ def _login_redirect() -> RedirectResponse:
 async def _resolve_link_user_or_redirect(
     request: Request,
     *,
-    session: AsyncSession,
+    auth_service: AuthService,
     link_user_id: uuid.UUID,
 ) -> User | RedirectResponse:
     try:
-        return await auth_routes.get_user_or_404(session, link_user_id)
+        return await auth_routes.get_user_or_404(auth_service, link_user_id)
     except HTTPException:
         clear_oidc_link_user_id(request)
         return RedirectResponse(url="/login", status_code=303)
@@ -49,14 +50,14 @@ async def _resolve_link_user_or_redirect(
 async def render_link_error(
     request: Request,
     *,
-    session: AsyncSession,
+    auth_service: AuthService,
     link_user_id: uuid.UUID,
     message: str,
     status_code: int,
 ) -> Response:
     resolved = await _resolve_link_user_or_redirect(
         request,
-        session=session,
+        auth_service=auth_service,
         link_user_id=link_user_id,
     )
     if isinstance(resolved, RedirectResponse):
@@ -65,7 +66,7 @@ async def render_link_error(
     clear_oidc_link_user_id(request)
     return await auth_routes.render_profile_template(
         request,
-        session=session,
+        auth_service=auth_service,
         user=resolved,
         identity_error=message,
         status_code=status_code,
@@ -76,6 +77,7 @@ async def _render_already_linked_error(
     request: Request,
     *,
     session: AsyncSession,
+    auth_service: AuthService,
     link_user: User,
     identity_provider: str,
     sub: str,
@@ -101,7 +103,7 @@ async def _render_already_linked_error(
         )
     return await auth_routes.render_profile_template(
         request,
-        session=session,
+        auth_service=auth_service,
         user=link_user,
         identity_error="This SSO account is already linked to a different user.",
         status_code=403,
@@ -111,7 +113,7 @@ async def _render_already_linked_error(
 async def _render_email_mismatch_error(
     request: Request,
     *,
-    session: AsyncSession,
+    auth_service: AuthService,
     link_user: User,
     email: str,
     debug_oidc: bool,
@@ -134,7 +136,7 @@ async def _render_email_mismatch_error(
         )
     return await auth_routes.render_profile_template(
         request,
-        session=session,
+        auth_service=auth_service,
         user=link_user,
         identity_error="SSO account email must match your profile email.",
         status_code=403,
@@ -184,6 +186,7 @@ async def handle_link_callback(
     request: Request,
     *,
     session: AsyncSession,
+    auth_service: AuthService,
     identity_provider: str,
     allow_google_calendar_token_capture: bool,
     link_user_id: uuid.UUID,
@@ -195,7 +198,7 @@ async def handle_link_callback(
 ) -> Response:
     resolved_link_user = await _resolve_link_user_or_redirect(
         request,
-        session=session,
+        auth_service=auth_service,
         link_user_id=link_user_id,
     )
     if isinstance(resolved_link_user, RedirectResponse):
@@ -219,6 +222,7 @@ async def handle_link_callback(
         return await _render_already_linked_error(
             request,
             session=session,
+            auth_service=auth_service,
             link_user=link_user,
             identity_provider=identity_provider,
             sub=sub,
@@ -228,7 +232,7 @@ async def handle_link_callback(
     if link_resolution.error == "email_mismatch":
         return await _render_email_mismatch_error(
             request,
-            session=session,
+            auth_service=auth_service,
             link_user=link_user,
             email=email,
             debug_oidc=debug_oidc,

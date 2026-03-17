@@ -60,6 +60,22 @@ class MeetingSeriesRepository(BaseRepository[MeetingSeries]):
         )
         return result.scalar_one_or_none()
 
+    async def list_pending_google_import_for_owner(
+        self,
+        *,
+        owner_user_id: uuid.UUID,
+    ) -> list[MeetingSeries]:
+        result = await self.session.execute(
+            select(MeetingSeries)
+            .where(
+                MeetingSeries.owner_user_id == owner_user_id,
+                MeetingSeries.imported_from_provider == CalendarProvider.google,
+                MeetingSeries.import_decision == ImportedSeriesDecision.pending,
+            )
+            .order_by(MeetingSeries.created_at.desc())
+        )
+        return list(result.scalars().all())
+
     async def find_for_google_import_key(
         self,
         *,

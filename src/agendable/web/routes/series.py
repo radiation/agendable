@@ -257,7 +257,6 @@ async def add_series_attendee(
     )
 
     if added_count > 0:
-        await session.commit()
         log_with_fields(
             logger,
             logging.INFO,

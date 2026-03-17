@@ -52,6 +52,10 @@ class CalendarEventMapper(Protocol):
     ) -> int: ...
 
 
+class GoogleCalendarConnectionNotFoundError(LookupError):
+    pass
+
+
 class GoogleCalendarSyncService:
     def __init__(
         self,
@@ -170,6 +174,17 @@ class GoogleCalendarSyncService:
         self._touch_successful_sync(connection, next_sync_token=batch.next_sync_token)
         await self.connection_repo.commit()
         return len(batch.events)
+
+    async def sync_primary_calendar_for_user(self, user_id: uuid.UUID) -> int:
+        connection = await self.connection_repo.get_for_user_provider_calendar(
+            user_id=user_id,
+            provider=CalendarProvider.google,
+            external_calendar_id="primary",
+        )
+        if connection is None:
+            raise GoogleCalendarConnectionNotFoundError
+
+        return await self.sync_connection(connection)
 
     async def _try_acquire_connection_sync_lock(
         self,

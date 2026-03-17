@@ -11,11 +11,14 @@ from agendable.db.repos import (
     DashboardRepository,
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
+    ExternalIdentityRepository,
     MeetingOccurrenceAttendeeRepository,
     MeetingOccurrenceRepository,
     MeetingSeriesRepository,
     UserRepository,
 )
+from agendable.services.admin_service import AdminService
+from agendable.services.auth_service import AuthService
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 from agendable.services.dashboard_service import DashboardService
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
@@ -69,6 +72,12 @@ def get_user_repo(
     return UserRepository(session)
 
 
+def get_external_identity_repo(
+    session: AsyncSession = Depends(get_session),
+) -> ExternalIdentityRepository:
+    return ExternalIdentityRepository(session)
+
+
 def get_external_calendar_connection_repo(
     session: AsyncSession = Depends(get_session),
 ) -> ExternalCalendarConnectionRepository:
@@ -106,6 +115,31 @@ def get_dashboard_service(
     dashboard_repo: DashboardRepository = Depends(get_dashboard_repo),
 ) -> DashboardService:
     return DashboardService(dashboard_repo=dashboard_repo)
+
+
+def get_admin_service(
+    users: UserRepository = Depends(get_user_repo),
+    external_identities: ExternalIdentityRepository = Depends(get_external_identity_repo),
+) -> AdminService:
+    return AdminService(users=users, external_identities=external_identities)
+
+
+def get_auth_service(
+    session: AsyncSession = Depends(get_session),
+    users: UserRepository = Depends(get_user_repo),
+    external_identities: ExternalIdentityRepository = Depends(get_external_identity_repo),
+    calendar_connections: ExternalCalendarConnectionRepository = Depends(
+        get_external_calendar_connection_repo
+    ),
+    series: MeetingSeriesRepository = Depends(get_meeting_series_repo),
+) -> AuthService:
+    return AuthService(
+        session=session,
+        users=users,
+        external_identities=external_identities,
+        calendar_connections=calendar_connections,
+        series=series,
+    )
 
 
 def get_series_service(
@@ -167,13 +201,16 @@ def get_google_calendar_sync_service(
 
 
 __all__ = [
+    "get_admin_service",
     "get_admin_user",
+    "get_auth_service",
     "get_calendar_event_mapping_service",
     "get_current_user",
     "get_dashboard_repo",
     "get_dashboard_service",
     "get_external_calendar_connection_repo",
     "get_external_calendar_event_mirror_repo",
+    "get_external_identity_repo",
     "get_google_calendar_client",
     "get_google_calendar_sync_service",
     "get_google_imported_series_service",

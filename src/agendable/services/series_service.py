@@ -197,11 +197,14 @@ class SeriesService:
             user_id=attendee_user_id,
             occurrence_ids=occurrence_ids,
         )
-        return await self.attendees.add_missing_links(
+        added_count = await self.attendees.add_missing_links(
             user_id=attendee_user_id,
             occurrence_ids=occurrence_ids,
             existing_occurrence_ids=existing_occurrence_ids,
         )
+        if added_count > 0:
+            await self.session.commit()
+        return added_count
 
     async def create_occurrence_for_owner(
         self,

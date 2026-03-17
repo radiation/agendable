@@ -26,6 +26,7 @@ from agendable.security.audit_constants import (
     OIDC_REASON_OAUTH_ERROR,
     OIDC_REASON_RATE_LIMITED,
 )
+from agendable.services.auth_service import AuthService
 from agendable.services.calendar_connection_service import (
     should_capture_google_calendar_token,
     upsert_google_primary_calendar_connection,
@@ -238,6 +239,7 @@ async def _create_login_identity_if_needed(
 async def _exchange_token_or_error(
     request: Request,
     *,
+    auth_service: AuthService,
     oidc_client: OidcClient,
     debug_oidc: bool,
     link_user_id: uuid.UUID | None,
@@ -256,7 +258,7 @@ async def _exchange_token_or_error(
         if link_user_id is not None:
             return await render_link_error(
                 request,
-                session=session,
+                auth_service=auth_service,
                 link_user_id=link_user_id,
                 message="SSO linking was cancelled or failed.",
                 status_code=400,
@@ -269,6 +271,7 @@ async def _exchange_token_or_error(
 async def _parse_and_validate_claims_or_error(
     request: Request,
     *,
+    auth_service: AuthService,
     oidc_client: OidcClient,
     token: dict[str, object],
     debug_oidc: bool,
@@ -312,7 +315,7 @@ async def _parse_and_validate_claims_or_error(
     if link_user_id is not None:
         return await render_link_error(
             request,
-            session=session,
+            auth_service=auth_service,
             link_user_id=link_user_id,
             message="SSO provider did not return required identity claims.",
             status_code=403,
@@ -323,6 +326,7 @@ async def _parse_and_validate_claims_or_error(
 async def extract_oidc_identity_or_response(
     request: Request,
     *,
+    auth_service: AuthService,
     oidc_client: OidcClient,
     debug_oidc: bool,
     link_user_id: uuid.UUID | None,
@@ -330,6 +334,7 @@ async def extract_oidc_identity_or_response(
 ) -> tuple[str, str, Mapping[str, object], OidcTokenCapture] | Response:
     token_or_response = await _exchange_token_or_error(
         request,
+        auth_service=auth_service,
         oidc_client=oidc_client,
         debug_oidc=debug_oidc,
         link_user_id=link_user_id,
@@ -340,6 +345,7 @@ async def extract_oidc_identity_or_response(
 
     claims_or_response = await _parse_and_validate_claims_or_error(
         request,
+        auth_service=auth_service,
         oidc_client=oidc_client,
         token=token_or_response,
         debug_oidc=debug_oidc,
@@ -385,6 +391,7 @@ def domain_block_response(
 async def rate_limit_block_response(
     request: Request,
     *,
+    auth_service: AuthService,
     settings: Settings,
     link_user_id: uuid.UUID | None,
     email: str,
@@ -404,7 +411,7 @@ async def rate_limit_block_response(
     if link_user_id is not None:
         return await render_link_error(
             request,
-            session=session,
+            auth_service=auth_service,
             link_user_id=link_user_id,
             message="Too many SSO attempts. Try again in a minute.",
             status_code=429,

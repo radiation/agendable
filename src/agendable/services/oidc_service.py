@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -30,6 +31,14 @@ class OidcLinkResolution(OidcResolution):
 
 
 class OidcLoginResolution(OidcResolution):
+    pass
+
+
+class OidcIdentityNotFoundError(LookupError):
+    pass
+
+
+class OidcOnlySignInMethodError(ValueError):
     pass
 
 
@@ -174,3 +183,24 @@ async def resolve_oidc_login_resolution(
         )
 
     return OidcLoginResolution(user=user, create_identity=True)
+
+
+async def unlink_oidc_identity_for_user(
+    session: AsyncSession,
+    *,
+    user: User,
+    identity_id: uuid.UUID,
+) -> uuid.UUID:
+    ext_repo = ExternalIdentityRepository(session)
+
+    identity = await ext_repo.get(identity_id)
+    if identity is None or identity.user_id != user.id:
+        raise OidcIdentityNotFoundError
+
+    identities = await ext_repo.list_by_user_id(user.id)
+    if user.password_hash is None and len(identities) <= 1:
+        raise OidcOnlySignInMethodError
+
+    await ext_repo.delete(identity, flush=False)
+    await session.commit()
+    return identity.id

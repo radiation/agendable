@@ -11,20 +11,26 @@ from starlette.responses import Response
 
 from agendable.auth import require_user
 from agendable.db.models import (
-    AgendaItem,
-    Task,
     User,
-)
-from agendable.db.repos import (
-    AgendaItemRepository,
-    MeetingOccurrenceAttendeeRepository,
-    MeetingOccurrenceRepository,
-    TaskRepository,
-    UserRepository,
 )
 from agendable.dependencies import get_session
 from agendable.logging_config import log_with_fields
-from agendable.services import complete_occurrence_and_roll_forward
+from agendable.services import (
+    OccurrenceAgendaItemNotFoundError,
+    OccurrenceNotFoundError,
+    OccurrenceTaskNotFoundError,
+    add_agenda_item_for_occurrence,
+    add_attendee_by_email,
+    complete_occurrence_and_roll_forward,
+    create_task_for_occurrence,
+    get_agenda_item_with_occurrence,
+    get_task_with_occurrence,
+    toggle_agenda_item_done,
+    toggle_task_done,
+)
+from agendable.services import (
+    convert_agenda_item_to_task as convert_agenda_item_to_task_service,
+)
 from agendable.web.routes.common import templates
 from agendable.web.routes.occurrences.access import (
     ensure_occurrence_writable,
@@ -146,15 +152,14 @@ async def create_task(
             task_form_errors=task_form_errors,
         )
 
-    task = Task(
+    task = await create_task_for_occurrence(
+        session,
         occurrence_id=occurrence_id,
         title=normalized_title,
         description=normalized_description,
         assigned_user_id=final_assignee_id,
         due_at=final_due_at,
     )
-    session.add(task)
-    await session.commit()
     record_occurrence_activity(
         occurrence_id=occurrence.id,
         actor_display_name=current_user.full_name,
@@ -197,9 +202,13 @@ async def add_attendee(
         attendee_form_errors["email"] = "Attendee email is required."
 
     attendee_user: User | None = None
+    attendee_added = False
     if not attendee_form_errors:
-        users_repo = UserRepository(session)
-        attendee_user = await users_repo.get_by_email(normalized_email)
+        attendee_user, attendee_added = await add_attendee_by_email(
+            session,
+            occurrence_id=occurrence_id,
+            email=normalized_email,
+        )
         if attendee_user is None:
             attendee_form_errors["email"] = "No user found with that email."
 
@@ -218,15 +227,7 @@ async def add_attendee(
     if attendee_user is None:
         raise HTTPException(status_code=400, detail="Invalid attendee")
 
-    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
-    existing = await attendee_repo.get_by_occurrence_and_user(occurrence_id, attendee_user.id)
-    if existing is None:
-        await attendee_repo.add_link(
-            occurrence_id=occurrence_id,
-            user_id=attendee_user.id,
-            flush=False,
-        )
-        await session.commit()
+    if attendee_added:
         record_occurrence_activity(
             occurrence_id=occurrence.id,
             actor_display_name=current_user.full_name,
@@ -255,22 +256,15 @@ async def toggle_task(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
 ) -> RedirectResponse:
-    tasks_repo = TaskRepository(session)
-    task = await tasks_repo.get_by_id(task_id)
-    if task is None:
-        raise HTTPException(status_code=404)
-
-    occ_repo = MeetingOccurrenceRepository(session)
-    occurrence = await occ_repo.get_by_id(task.occurrence_id)
-    if occurrence is None:
-        raise HTTPException(status_code=404)
+    try:
+        task, occurrence = await get_task_with_occurrence(session, task_id=task_id)
+    except (OccurrenceTaskNotFoundError, OccurrenceNotFoundError) as exc:
+        raise HTTPException(status_code=404) from exc
 
     await get_accessible_occurrence(session, occurrence.id, current_user.id)
 
     ensure_occurrence_writable(occurrence.id, occurrence.is_completed)
-
-    task.is_done = not task.is_done
-    await session.commit()
+    await toggle_task_done(session, task=task)
     record_occurrence_activity(
         occurrence_id=occurrence.id,
         actor_display_name=current_user.full_name,
@@ -319,13 +313,12 @@ async def add_agenda_item(
             agenda_form_errors={"body": "Agenda item is required."},
         )
 
-    item = AgendaItem(
+    item = await add_agenda_item_for_occurrence(
+        session,
         occurrence_id=occurrence_id,
         body=normalized_body,
         description=normalized_description,
     )
-    session.add(item)
-    await session.commit()
     record_occurrence_activity(
         occurrence_id=occurrence.id,
         actor_display_name=current_user.full_name,
@@ -355,15 +348,10 @@ async def convert_agenda_item_to_task(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
 ) -> RedirectResponse:
-    agenda_repo = AgendaItemRepository(session)
-    item = await agenda_repo.get_by_id(item_id)
-    if item is None:
-        raise HTTPException(status_code=404)
-
-    occ_repo = MeetingOccurrenceRepository(session)
-    occurrence = await occ_repo.get_by_id(item.occurrence_id)
-    if occurrence is None:
-        raise HTTPException(status_code=404)
+    try:
+        item, occurrence = await get_agenda_item_with_occurrence(session, item_id=item_id)
+    except (OccurrenceAgendaItemNotFoundError, OccurrenceNotFoundError) as exc:
+        raise HTTPException(status_code=404) from exc
 
     _, series = await get_accessible_occurrence(session, occurrence.id, current_user.id)
     ensure_occurrence_writable(occurrence.id, occurrence.is_completed)
@@ -380,17 +368,13 @@ async def convert_agenda_item_to_task(
         raise HTTPException(status_code=400, detail=assignee_errors["assigned_user_id"])
 
     due_at = await get_default_task_due_at(session, occurrence)
-    title = item.body.strip() if item.body.strip() else "Agenda follow-up"
-    task = Task(
-        occurrence_id=occurrence.id,
-        title=title,
-        description=item.description,
+    task = await convert_agenda_item_to_task_service(
+        session,
+        item=item,
+        occurrence=occurrence,
         assigned_user_id=assigned_user_id,
         due_at=due_at,
     )
-    item.is_done = True
-    session.add(task)
-    await session.commit()
     record_occurrence_activity(
         occurrence_id=occurrence.id,
         actor_display_name=current_user.full_name,
@@ -421,23 +405,15 @@ async def toggle_agenda_item(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
 ) -> RedirectResponse:
-    agenda_repo = AgendaItemRepository(session)
-    item = await agenda_repo.get_by_id(item_id)
-    if item is None:
-        raise HTTPException(status_code=404)
-
-    occ_repo = MeetingOccurrenceRepository(session)
-    occurrence = await occ_repo.get_by_id(item.occurrence_id)
-    if occurrence is None:
-        raise HTTPException(status_code=404)
+    try:
+        item, occurrence = await get_agenda_item_with_occurrence(session, item_id=item_id)
+    except (OccurrenceAgendaItemNotFoundError, OccurrenceNotFoundError) as exc:
+        raise HTTPException(status_code=404) from exc
 
     await get_accessible_occurrence(session, occurrence.id, current_user.id)
 
     ensure_occurrence_writable(occurrence.id, occurrence.is_completed)
-
-    item.is_done = not item.is_done
-
-    await session.commit()
+    await toggle_agenda_item_done(session, item=item)
     record_occurrence_activity(
         occurrence_id=occurrence.id,
         actor_display_name=current_user.full_name,

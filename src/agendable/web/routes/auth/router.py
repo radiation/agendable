@@ -7,24 +7,12 @@ from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import hash_password, require_user, verify_password
-from agendable.db.models import (
-    CalendarProvider,
-    ImportedSeriesDecision,
-    MeetingSeries,
-    User,
-    UserRole,
-)
-from agendable.db.repos import (
-    ExternalCalendarConnectionRepository,
-    ExternalIdentityRepository,
-    UserRepository,
-)
-from agendable.dependencies import get_session
+from agendable.db.models import MeetingSeries, User, UserRole
+from agendable.dependencies import get_auth_service, get_session
 from agendable.security.audit import audit_auth_denied, audit_auth_success
 from agendable.security.audit_constants import (
     AUTH_EVENT_LOGOUT,
@@ -36,6 +24,7 @@ from agendable.security.audit_constants import (
     AUTH_REASON_INVALID_CREDENTIALS,
     AUTH_REASON_RATE_LIMITED,
 )
+from agendable.services.auth_service import AuthService, AuthUserNotFoundError
 from agendable.settings import get_settings
 from agendable.sso.oidc.client import OidcClient
 from agendable.web.routes.auth.oidc import router as auth_oidc_router
@@ -151,12 +140,11 @@ async def _redirect_if_authenticated(
         return None
 
 
-async def get_user_or_404(session: AsyncSession, user_id: uuid.UUID) -> User:
-    users = UserRepository(session)
-    user = await users.get_by_id(user_id)
-    if user is None:
-        raise HTTPException(status_code=404)
-    return user
+async def get_user_or_404(auth_service: AuthService, user_id: uuid.UUID) -> User:
+    try:
+        return await auth_service.get_user_or_404(user_id)
+    except AuthUserNotFoundError as exc:
+        raise HTTPException(status_code=404) from exc
 
 
 def _oidc_oauth_client() -> OidcClient:
@@ -184,47 +172,26 @@ def keycloak_oidc_oauth_client() -> OidcClient:
 async def render_profile_template(
     request: Request,
     *,
-    session: AsyncSession,
+    auth_service: AuthService,
     user: User,
     identity_error: str | None,
     status_code: int = 200,
 ) -> Response:
     settings = get_settings()
-    ext_repo = ExternalIdentityRepository(session)
-    calendar_connection_repo = ExternalCalendarConnectionRepository(session)
-    identities = await ext_repo.list_by_user_id(user.id)
-    google_calendar_connection = await calendar_connection_repo.get_for_user_provider_calendar(
+    profile_data = await auth_service.get_profile_view_data(
         user_id=user.id,
-        provider=CalendarProvider.google,
-        external_calendar_id="primary",
+        google_sync_enabled=settings.google_calendar_sync_enabled,
     )
-    pending_import_series: list[MeetingSeries] = []
-    pending_import_recurrence: dict[uuid.UUID, str] = {}
-    if settings.google_calendar_sync_enabled:
-        pending_import_series = list(
-            (
-                await session.execute(
-                    select(MeetingSeries)
-                    .where(
-                        MeetingSeries.owner_user_id == user.id,
-                        MeetingSeries.imported_from_provider == CalendarProvider.google,
-                        MeetingSeries.import_decision == ImportedSeriesDecision.pending,
-                    )
-                    .order_by(MeetingSeries.created_at.desc())
-                )
-            )
-            .scalars()
-            .all()
+    pending_import_series: list[MeetingSeries] = profile_data.pending_import_series
+    pending_import_recurrence: dict[uuid.UUID, str] = {
+        series.id: recurrence_label(
+            recurrence_rrule=series.recurrence_rrule,
+            recurrence_dtstart=series.recurrence_dtstart,
+            recurrence_timezone=series.recurrence_timezone,
+            default_interval_days=series.default_interval_days,
         )
-        pending_import_recurrence = {
-            series.id: recurrence_label(
-                recurrence_rrule=series.recurrence_rrule,
-                recurrence_dtstart=series.recurrence_dtstart,
-                recurrence_timezone=series.recurrence_timezone,
-                default_interval_days=series.default_interval_days,
-            )
-            for series in pending_import_series
-        }
+        for series in pending_import_series
+    }
 
     return templates.TemplateResponse(
         request,
@@ -232,13 +199,13 @@ async def render_profile_template(
         {
             "user": user,
             "current_user": user,
-            "identities": identities,
+            "identities": profile_data.identities,
             "identity_error": identity_error,
             "oidc_enabled": _auth_oidc_enabled(),
             "keycloak_oidc_enabled": _auth_keycloak_oidc_enabled(),
             "any_oidc_enabled": _auth_oidc_enabled() or _auth_keycloak_oidc_enabled(),
             "google_calendar_sync_enabled": settings.google_calendar_sync_enabled,
-            "google_calendar_connected": google_calendar_connection is not None,
+            "google_calendar_connected": profile_data.google_calendar_connected,
             "pending_import_series": pending_import_series,
             "pending_import_recurrence": pending_import_recurrence,
         },
@@ -267,7 +234,7 @@ async def login(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
-    session: AsyncSession = Depends(get_session),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> Response:
     normalized_email = email.strip().lower()
 
@@ -283,8 +250,7 @@ async def login(
             status_code=429,
         )
 
-    users = UserRepository(session)
-    user = await users.get_by_email(normalized_email)
+    user = await auth_service.get_by_email(normalized_email)
 
     if user is None:
         record_login_failure(request, normalized_email)
@@ -325,9 +291,10 @@ async def login(
             status_code=401,
         )
 
-    was_promoted = await maybe_promote_bootstrap_admin(user, session)
-    if was_promoted:
-        await session.commit()
+    await auth_service.promote_bootstrap_admin_if_needed(
+        user=user,
+        bootstrap_admin_email=get_settings().bootstrap_admin_email,
+    )
 
     request.session["user_id"] = str(user.id)
     audit_auth_success(event=AUTH_EVENT_PASSWORD_LOGIN, actor=user)
@@ -355,7 +322,7 @@ async def signup(
     timezone: str = Form("UTC"),
     email: str = Form(...),
     password: str = Form(...),
-    session: AsyncSession = Depends(get_session),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> Response:
     normalized_first_name = first_name.strip()
     normalized_last_name = last_name.strip()
@@ -367,8 +334,7 @@ async def signup(
     if not normalized_email:
         raise HTTPException(status_code=400, detail="Email is required")
 
-    users = UserRepository(session)
-    existing = await users.get_by_email(normalized_email)
+    existing = await auth_service.get_by_email(normalized_email)
     if existing is not None:
         audit_auth_denied(
             event=AUTH_EVENT_SIGNUP,
@@ -387,18 +353,14 @@ async def signup(
             status_code=400,
         )
 
-    user = User(
+    user = await auth_service.create_local_user(
         email=normalized_email,
         first_name=normalized_first_name,
         last_name=normalized_last_name,
         timezone=normalized_timezone,
-        display_name=f"{normalized_first_name} {normalized_last_name}".strip(),
         role=(UserRole.admin if is_bootstrap_admin_email(normalized_email) else UserRole.user),
         password_hash=hash_password(password),
     )
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
 
     request.session["user_id"] = str(user.id)
     audit_auth_success(event=AUTH_EVENT_SIGNUP, actor=user, role=user.role.value)
@@ -416,15 +378,15 @@ async def logout(request: Request) -> RedirectResponse:
 @router.get("/profile", response_class=HTMLResponse)
 async def profile(
     request: Request,
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> HTMLResponse:
-    user = await get_user_or_404(session, current_user.id)
+    user = await get_user_or_404(auth_service, current_user.id)
     return cast(
         HTMLResponse,
         await render_profile_template(
             request,
-            session=session,
+            auth_service=auth_service,
             user=user,
             identity_error=None,
         ),
@@ -438,10 +400,10 @@ async def update_profile(
     last_name: str = Form(""),
     timezone: str = Form("UTC"),
     prefers_dark_mode: str | None = Form(None),
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> RedirectResponse:
-    user = await get_user_or_404(session, current_user.id)
+    user = await get_user_or_404(auth_service, current_user.id)
 
     normalized_first_name = first_name.strip()
     normalized_last_name = last_name.strip()
@@ -450,12 +412,13 @@ async def update_profile(
     if not normalized_first_name:
         raise HTTPException(status_code=400, detail="First name is required")
 
-    user.first_name = normalized_first_name
-    user.last_name = normalized_last_name
-    user.timezone = normalized_timezone
-    user.display_name = f"{normalized_first_name} {normalized_last_name}".strip()
-    user.prefers_dark_mode = prefers_dark_mode is not None
-    await session.commit()
+    await auth_service.update_profile(
+        user=user,
+        first_name=normalized_first_name,
+        last_name=normalized_last_name,
+        timezone=normalized_timezone,
+        prefers_dark_mode=prefers_dark_mode is not None,
+    )
 
     return RedirectResponse(url="/profile", status_code=303)
 

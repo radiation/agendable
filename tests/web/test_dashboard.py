@@ -136,13 +136,31 @@ async def test_dashboard_shows_invited_meetings_and_tasks(
         due_at=now + timedelta(days=2),
         is_done=False,
     )
-    db_session.add(invited_task)
+    my_task = Task(
+        occurrence_id=upcoming.id,
+        assigned_user_id=invited.id,
+        title="Invited personal urgent task",
+        due_at=now + timedelta(days=1),
+        is_done=False,
+    )
+    db_session.add_all([invited_task, my_task])
     await db_session.commit()
 
     resp = await client.get("/dashboard")
     assert resp.status_code == 200
     assert str(upcoming.id) in resp.text
+    assert "Invited personal urgent task" in resp.text
     assert "Invited task visibility" in resp.text
+
+    urgent_section = resp.text.split("<h3>Immediate tasks</h3>", maxsplit=1)[1].split(
+        "<h3>Upcoming meetings</h3>",
+        maxsplit=1,
+    )[0]
+    assert "Invited personal urgent task" in urgent_section
+    assert "Invited task visibility" not in urgent_section
+
+    assert "Invited task visibility" in resp.text
+    assert "2 participants" in resp.text
 
 
 @pytest.mark.asyncio

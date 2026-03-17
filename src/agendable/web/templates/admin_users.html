@@ -3,7 +3,7 @@
 {% block title %}Agendable — Admin Users{% endblock %}
 
 {% block content %}
-<p><a href="/">← Back</a></p>
+<p class="back-link-row"><a href="/">← Back</a></p>
 
 <section>
     <h2>Users</h2>
@@ -11,7 +11,7 @@
     <p><strong>{{ error }}</strong></p>
     {% endif %}
 
-    <table>
+    <table class="admin-users-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -38,7 +38,7 @@
                     {% endif %}
                 </td>
                 <td>
-                    <form method="post" action="/admin/users/{{ user.id }}/role" style="display:inline;">
+                    <form method="post" action="/admin/users/{{ user.id }}/role" class="admin-inline-form">
                         <select name="role">
                             <option value="user" {% if user.role.value=="user" %}selected{% endif %}>user</option>
                             <option value="admin" {% if user.role.value=="admin" %}selected{% endif %}>admin</option>
@@ -47,7 +47,7 @@
                     </form>
 
                     <form method="post" action="/admin/users/{{ user.id }}/active"
-                        style="display:inline; margin-left: .5rem;">
+                        class="admin-inline-form admin-inline-form-gap">
                         {% if user.is_active %}
                         <input type="hidden" name="is_active" value="false" />
                         <button type="submit">Deactivate</button>

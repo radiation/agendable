@@ -6,21 +6,20 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user
 from agendable.db.models import MeetingOccurrence, User
 from agendable.db.repos import (
-    MeetingOccurrenceAttendeeRepository,
     MeetingOccurrenceRepository,
     MeetingSeriesRepository,
 )
-from agendable.dependencies import get_session
+from agendable.dependencies import get_series_service, get_session
 from agendable.logging_config import log_with_fields
 from agendable.reminders import build_default_email_reminder
 from agendable.services import create_series_with_occurrences
+from agendable.services.series_service import SeriesService, UnknownAttendeeEmailsError
 from agendable.settings import get_settings
 from agendable.web.routes.common import (
     parse_date,
@@ -103,30 +102,13 @@ async def series_attendee_suggestions(
     attendee_emails: str = "",
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    series_service: SeriesService = Depends(get_series_service),
 ) -> HTMLResponse:
     needle = autocomplete_needle(q=q, attendee_emails=attendee_emails)
-    users: list[User] = []
-    if len(needle) >= 2:
-        pattern = f"%{needle}%"
-        users = list(
-            (
-                await session.execute(
-                    select(User)
-                    .where(
-                        User.is_active.is_(True),
-                        User.id != current_user.id,
-                        or_(
-                            func.lower(User.email).like(pattern),
-                            func.lower(User.display_name).like(pattern),
-                        ),
-                    )
-                    .order_by(User.display_name.asc(), User.email.asc())
-                    .limit(8)
-                )
-            )
-            .scalars()
-            .all()
-        )
+    users = await series_service.list_attendee_suggestions(
+        needle=needle,
+        current_user_id=current_user.id,
+    )
 
     return templates.TemplateResponse(
         request,
@@ -157,6 +139,7 @@ async def create_series(
     generate_count: int = Form(10),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    series_service: SeriesService = Depends(get_series_service),
 ) -> RedirectResponse:
     validate_create_series_inputs(
         reminder_minutes_before=reminder_minutes_before,
@@ -198,34 +181,19 @@ async def create_series(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    attendee_user_ids: set[uuid.UUID] = {current_user.id}
     parsed_attendee_emails = parse_attendee_emails(attendee_emails)
-    if parsed_attendee_emails:
-        attendee_users = (
-            (await session.execute(select(User).where(User.email.in_(parsed_attendee_emails))))
-            .scalars()
-            .all()
+    try:
+        attendee_user_ids = await series_service.resolve_attendee_user_ids(
+            attendee_emails=parsed_attendee_emails,
+            owner_user_id=current_user.id,
         )
-        attendee_users_by_email = {user.email.lower(): user for user in attendee_users}
-        unknown_attendee_emails = [
-            email for email in parsed_attendee_emails if email not in attendee_users_by_email
-        ]
-        if unknown_attendee_emails:
-            raise HTTPException(
-                status_code=400,
-                detail=("Unknown attendee email(s): " + ", ".join(unknown_attendee_emails)),
-            )
+    except UnknownAttendeeEmailsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        attendee_user_ids.update(user.id for user in attendee_users)
-
-    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
-    for occurrence in occurrences:
-        for attendee_user_id in attendee_user_ids:
-            await attendee_repo.add_link(
-                occurrence_id=occurrence.id,
-                user_id=attendee_user_id,
-                flush=False,
-            )
+    await series_service.link_attendees_to_occurrences(
+        occurrences=occurrences,
+        attendee_user_ids=attendee_user_ids,
+    )
 
     await session.commit()
 

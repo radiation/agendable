@@ -11,14 +11,17 @@ from agendable.db.repos import (
     DashboardRepository,
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
+    MeetingOccurrenceAttendeeRepository,
     MeetingOccurrenceRepository,
     MeetingSeriesRepository,
+    UserRepository,
 )
 from agendable.services.calendar_event_mapping_service import CalendarEventMappingService
 from agendable.services.dashboard_service import DashboardService
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.google_imported_series_service import GoogleImportedSeriesService
+from agendable.services.series_service import SeriesService
 from agendable.settings import Settings, get_settings
 
 
@@ -52,6 +55,18 @@ def get_meeting_occurrence_repo(
     session: AsyncSession = Depends(get_session),
 ) -> MeetingOccurrenceRepository:
     return MeetingOccurrenceRepository(session)
+
+
+def get_meeting_occurrence_attendee_repo(
+    session: AsyncSession = Depends(get_session),
+) -> MeetingOccurrenceAttendeeRepository:
+    return MeetingOccurrenceAttendeeRepository(session)
+
+
+def get_user_repo(
+    session: AsyncSession = Depends(get_session),
+) -> UserRepository:
+    return UserRepository(session)
 
 
 def get_external_calendar_connection_repo(
@@ -91,6 +106,13 @@ def get_dashboard_service(
     dashboard_repo: DashboardRepository = Depends(get_dashboard_repo),
 ) -> DashboardService:
     return DashboardService(dashboard_repo=dashboard_repo)
+
+
+def get_series_service(
+    users: UserRepository = Depends(get_user_repo),
+    attendees: MeetingOccurrenceAttendeeRepository = Depends(get_meeting_occurrence_attendee_repo),
+) -> SeriesService:
+    return SeriesService(users=users, attendees=attendees)
 
 
 def get_google_imported_series_service(
@@ -146,7 +168,10 @@ __all__ = [
     "get_google_calendar_client",
     "get_google_calendar_sync_service",
     "get_google_imported_series_service",
+    "get_meeting_occurrence_attendee_repo",
     "get_meeting_occurrence_repo",
     "get_meeting_series_repo",
+    "get_series_service",
     "get_session",
+    "get_user_repo",
 ]

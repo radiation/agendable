@@ -135,3 +135,21 @@ class AuthService:
             google_calendar_connected=google_calendar_connection is not None,
             pending_import_series=pending_import_series,
         )
+
+
+async def maybe_promote_bootstrap_admin(
+    *,
+    session: AsyncSession,
+    user: User,
+    bootstrap_admin_email: str | None,
+) -> bool:
+    if user.role == UserRole.admin:
+        return False
+    if bootstrap_admin_email is None:
+        return False
+    if bootstrap_admin_email.strip().lower() != user.email.strip().lower():
+        return False
+
+    user.role = UserRole.admin
+    await session.flush()
+    return True

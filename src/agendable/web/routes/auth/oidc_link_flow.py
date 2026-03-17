@@ -8,8 +8,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
-from agendable.db.models import ExternalIdentity, User
-from agendable.db.repos import ExternalCalendarConnectionRepository, ExternalIdentityRepository
+from agendable.db.models import User
 from agendable.logging_config import log_with_fields
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
 from agendable.security.audit_constants import (
@@ -18,9 +17,11 @@ from agendable.security.audit_constants import (
     OIDC_REASON_EMAIL_MISMATCH,
 )
 from agendable.services.auth_service import AuthService
-from agendable.services.calendar_connection_service import (
-    should_capture_google_calendar_token,
-    upsert_google_primary_calendar_connection,
+from agendable.services.oidc_persistence_service import (
+    commit_oidc_session,
+    create_oidc_identity_if_needed,
+    get_identity_for_provider_subject,
+    maybe_upsert_google_primary_connection,
 )
 from agendable.services.oidc_service import resolve_oidc_link_resolution
 from agendable.settings import Settings
@@ -83,8 +84,11 @@ async def _render_already_linked_error(
     sub: str,
     debug_oidc: bool,
 ) -> Response:
-    ext_repo = ExternalIdentityRepository(session)
-    ext = await ext_repo.get_by_provider_subject(identity_provider, sub)
+    ext = await get_identity_for_provider_subject(
+        session,
+        identity_provider=identity_provider,
+        subject=sub,
+    )
     clear_oidc_link_user_id(request)
     audit_oidc_denied(
         event=OIDC_EVENT_IDENTITY_LINK,
@@ -152,13 +156,14 @@ async def _maybe_create_identity(
     sub: str,
     email: str,
 ) -> None:
-    if not create_identity:
-        return
-    ext = ExternalIdentity(
-        user_id=link_user.id, provider=identity_provider, subject=sub, email=email
+    await create_oidc_identity_if_needed(
+        session,
+        user=link_user,
+        create_identity=create_identity,
+        identity_provider=identity_provider,
+        sub=sub,
+        email=email,
     )
-    session.add(ext)
-    await session.flush()
 
 
 async def _maybe_upsert_google_calendar_connection(
@@ -169,16 +174,12 @@ async def _maybe_upsert_google_calendar_connection(
     token_capture: OidcTokenCapture,
     settings: Settings,
 ) -> None:
-    if not allow_google_calendar_token_capture:
-        return
-    if not should_capture_google_calendar_token(settings=settings, token_capture=token_capture):
-        return
-
-    connection_repo = ExternalCalendarConnectionRepository(session)
-    await upsert_google_primary_calendar_connection(
-        connection_repo=connection_repo,
+    await maybe_upsert_google_primary_connection(
+        session,
         user=link_user,
+        allow_google_calendar_token_capture=allow_google_calendar_token_capture,
         token_capture=token_capture,
+        settings=settings,
     )
 
 
@@ -253,7 +254,7 @@ async def handle_link_callback(
         token_capture=token_capture,
         settings=settings,
     )
-    await session.commit()
+    await commit_oidc_session(session)
 
     clear_oidc_link_user_id(request)
     request.session["user_id"] = str(link_user.id)

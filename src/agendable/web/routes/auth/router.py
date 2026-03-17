@@ -24,7 +24,13 @@ from agendable.security.audit_constants import (
     AUTH_REASON_INVALID_CREDENTIALS,
     AUTH_REASON_RATE_LIMITED,
 )
-from agendable.services.auth_service import AuthService, AuthUserNotFoundError
+from agendable.services.auth_service import (
+    AuthService,
+    AuthUserNotFoundError,
+)
+from agendable.services.auth_service import (
+    maybe_promote_bootstrap_admin as maybe_promote_bootstrap_admin_service,
+)
 from agendable.settings import get_settings
 from agendable.sso.oidc.client import OidcClient
 from agendable.web.routes.auth.oidc import router as auth_oidc_router
@@ -55,14 +61,11 @@ def is_bootstrap_admin_email(email: str) -> bool:
 
 
 async def maybe_promote_bootstrap_admin(user: User, session: AsyncSession) -> bool:
-    if user.role == UserRole.admin:
-        return False
-    if not is_bootstrap_admin_email(user.email):
-        return False
-
-    user.role = UserRole.admin
-    await session.flush()
-    return True
+    return await maybe_promote_bootstrap_admin_service(
+        session=session,
+        user=user,
+        bootstrap_admin_email=get_settings().bootstrap_admin_email,
+    )
 
 
 def render_login_template(

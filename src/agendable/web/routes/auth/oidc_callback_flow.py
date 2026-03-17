@@ -11,8 +11,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
-from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User
-from agendable.db.repos import ExternalCalendarConnectionRepository
+from agendable.db.models import ExternalCalendarConnection, User
 from agendable.logging_config import log_with_fields
 from agendable.providers import (
     build_google_calendar_sync_service as build_google_calendar_sync_service_provider,
@@ -27,11 +26,12 @@ from agendable.security.audit_constants import (
     OIDC_REASON_RATE_LIMITED,
 )
 from agendable.services.auth_service import AuthService
-from agendable.services.calendar_connection_service import (
-    should_capture_google_calendar_token,
-    upsert_google_primary_calendar_connection,
-)
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
+from agendable.services.oidc_persistence_service import (
+    commit_oidc_session,
+    create_oidc_identity_if_needed,
+    maybe_upsert_google_primary_connection,
+)
 from agendable.services.oidc_service import (
     OidcLoginResolution,
     is_email_allowed_for_domain,
@@ -141,15 +141,14 @@ async def handle_login_callback(
         debug_oidc=debug_oidc,
     )
 
-    if allow_google_calendar_token_capture and should_capture_google_calendar_token(
-        settings=settings, token_capture=token_capture
-    ):
-        connection_repo = ExternalCalendarConnectionRepository(session)
-        connection = await upsert_google_primary_calendar_connection(
-            connection_repo=connection_repo,
-            user=user,
-            token_capture=token_capture,
-        )
+    connection = await maybe_upsert_google_primary_connection(
+        session,
+        user=user,
+        allow_google_calendar_token_capture=allow_google_calendar_token_capture,
+        token_capture=token_capture,
+        settings=settings,
+    )
+    if connection is not None:
         await _maybe_auto_sync_new_connection(
             session=session,
             settings=settings,
@@ -168,7 +167,7 @@ async def handle_login_callback(
         )
 
     await auth_routes.maybe_promote_bootstrap_admin(user, session)
-    await session.commit()
+    await commit_oidc_session(session)
 
     request.session["user_id"] = str(user.id)
     audit_oidc_success(
@@ -226,14 +225,16 @@ async def _create_login_identity_if_needed(
     email: str,
     debug_oidc: bool,
 ) -> None:
-    if not create_identity:
-        return
-
     if debug_oidc:
         logger.info("OIDC callback linking or creating SSO identity for email=%s", email)
-    ext = ExternalIdentity(user_id=user.id, provider=identity_provider, subject=sub, email=email)
-    session.add(ext)
-    await session.flush()
+    await create_oidc_identity_if_needed(
+        session,
+        user=user,
+        create_identity=create_identity,
+        identity_provider=identity_provider,
+        sub=sub,
+        email=email,
+    )
 
 
 async def _exchange_token_or_error(

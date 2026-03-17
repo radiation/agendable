@@ -150,26 +150,18 @@ async def get_user_or_404(auth_service: AuthService, user_id: uuid.UUID) -> User
         raise HTTPException(status_code=404) from exc
 
 
-def _oidc_oauth_client() -> OidcClient:
+def oidc_oauth_client() -> OidcClient:
     client = oauth.create_client("oidc")
     if client is None:
         raise RuntimeError("OIDC OAuth client is not configured")
     return cast(OidcClient, client)
 
 
-def oidc_oauth_client() -> OidcClient:
-    return _oidc_oauth_client()
-
-
-def _keycloak_oidc_oauth_client() -> OidcClient:
+def keycloak_oidc_oauth_client() -> OidcClient:
     client = oauth.create_client("oidc_keycloak")
     if client is None:
         raise RuntimeError("Keycloak OIDC OAuth client is not configured")
     return cast(OidcClient, client)
-
-
-def keycloak_oidc_oauth_client() -> OidcClient:
-    return _keycloak_oidc_oauth_client()
 
 
 async def render_profile_template(
@@ -214,13 +206,6 @@ async def render_profile_template(
         },
         status_code=status_code,
     )
-
-
-_is_bootstrap_admin_email = is_bootstrap_admin_email
-_maybe_promote_bootstrap_admin = maybe_promote_bootstrap_admin
-_render_login_template = render_login_template
-_get_user_or_404 = get_user_or_404
-_render_profile_template = render_profile_template
 
 
 @router.get("/login", response_class=Response)

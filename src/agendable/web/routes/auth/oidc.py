@@ -63,6 +63,9 @@ from agendable.web.routes.auth.oidc_callbacks import (
     rate_limit_block_response,
 )
 from agendable.web.routes.auth.rate_limits import is_identity_link_start_rate_limited
+from agendable.web.routes.auth.seams import (
+    keycloak_oidc_oauth_client as seam_keycloak_oidc_oauth_client,
+)
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
@@ -132,12 +135,7 @@ async def keycloak_oidc_start(request: Request) -> Response:
             redirect_uri=redirect_uri,
         )
 
-    client_fn = getattr(
-        auth_routes,
-        "_keycloak_oidc_oauth_client",
-        auth_routes.keycloak_oidc_oauth_client,
-    )
-    oidc_client = client_fn()
+    oidc_client = seam_keycloak_oidc_oauth_client()
     authorize_params = build_authorize_params(settings.oidc_auth_prompt)
     return await oidc_client.authorize_redirect(request, redirect_uri, **authorize_params)
 
@@ -237,16 +235,10 @@ async def keycloak_oidc_callback(
             logger.info("Keycloak OIDC callback aborted: provider is disabled")
         raise HTTPException(status_code=404)
 
-    client_fn = getattr(
-        auth_routes,
-        "_keycloak_oidc_oauth_client",
-        auth_routes.keycloak_oidc_oauth_client,
-    )
-
     identity_or_response = await extract_oidc_identity_or_response(
         request,
         auth_service=auth_service,
-        oidc_client=client_fn(),
+        oidc_client=seam_keycloak_oidc_oauth_client(),
         debug_oidc=debug_oidc,
         link_user_id=link_user_id,
         session=session,

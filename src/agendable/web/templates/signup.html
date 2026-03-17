@@ -6,10 +6,10 @@
 <h2>Create account</h2>
 
 {% if error %}
-<p style="color: #b00020;"><strong>{{ error }}</strong></p>
+<p class="auth-error"><strong>{{ error }}</strong></p>
 {% endif %}
 
-<form method="post" action="/signup" style="display:flex; gap: .5rem; flex-wrap: wrap; align-items: end;">
+<form method="post" action="/signup" class="auth-form">
     <label>
         First name
         <input name="first_name" required value="{{ form.first_name }}" />
@@ -47,20 +47,7 @@
     <button type="submit">Create account</button>
 </form>
 
-<p style="margin-top: .75rem;"><small>Already have an account? <a href="/login">Sign in</a>.</small></p>
+<p class="auth-link-row"><small>Already have an account? <a href="/login">Sign in</a>.</small></p>
 
-<script>
-    (() => {
-        const tzInput = document.getElementById("signup-timezone");
-        if (!tzInput) return;
-
-        const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (!systemTz) return;
-
-        const hasSystemTz = Array.from(tzInput.options).some((opt) => opt.value === systemTz);
-        if (hasSystemTz && (!tzInput.value || tzInput.value === "UTC")) {
-            tzInput.value = systemTz;
-        }
-    })();
-</script>
+<script src="/static/signup.js"></script>
 {% endblock %}

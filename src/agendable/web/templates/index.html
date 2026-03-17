@@ -13,14 +13,14 @@
     {% else %}
     <section class="section-card">
         <h3>Create series</h3>
-        <form method="post" action="/series" class="form-grid">
+        <form method="post" action="/series" class="form-grid create-series-form">
             <label>
                 Title
                 <input name="title" required />
             </label>
 
             <label>
-                Repeat
+                Repeats
                 <select id="recurrence-freq" name="recurrence_freq" required hx-get="/series/recurrence-options"
                     hx-target="#recurrence-options" hx-swap="innerHTML">
                     <option value="DAILY">Daily</option>
@@ -29,7 +29,7 @@
                 </select>
             </label>
             <label>
-                Every
+                Interval
                 <input name="recurrence_interval" type="number" min="1" max="365" value="1" required />
             </label>
 
@@ -37,53 +37,63 @@
                 {% include "partials/series_recurrence_options.html" %}
             </div>
 
-            <label>
-                Time
-                <input name="recurrence_time" type="time" value="09:00" required />
-            </label>
-            <label>
-                Time zone
-                <select id="recurrence-timezone" name="recurrence_timezone" required>
-                    {% set selected_tz = current_user.timezone if current_user and current_user.timezone else "UTC" %}
-                    {% set ns = namespace(found=false) %}
-                    {% for tz_value, tz_label in timezone_options %}
-                    {% if tz_value == selected_tz %}{% set ns.found = true %}{% endif %}
-                    <option value="{{ tz_value }}" {% if tz_value==selected_tz %}selected{% endif %}>{{ tz_label }}
-                    </option>
-                    {% endfor %}
-                    {% if selected_tz and not ns.found %}
-                    <option value="{{ selected_tz }}" selected>{{ selected_tz }} (custom)</option>
-                    {% endif %}
-                </select>
-            </label>
-            <label>
-                Start date
-                <input name="recurrence_start_date" type="date" required />
-            </label>
-            <label>
-                Generate
-                <input name="generate_count" type="number" min="1" max="200" value="10" required />
-            </label>
-            <label>
-                Reminder lead (minutes)
-                <input name="reminder_minutes_before" type="number" min="0" max="43200" value="60" required />
-            </label>
+            <div class="span-all create-series-scheduling">
+                <p class="form-block-title">Schedule</p>
+                <div class="create-series-scheduling-grid">
+                    <label>
+                        Time
+                        <input name="recurrence_time" type="time" value="09:00" required />
+                    </label>
+                    <label class="span-2">
+                        Time zone
+                        <select id="recurrence-timezone" name="recurrence_timezone" required>
+                            {% set selected_tz = current_user.timezone if current_user and current_user.timezone else
+                            "UTC" %}
+                            {% set ns = namespace(found=false) %}
+                            {% for tz_value, tz_label in timezone_options %}
+                            {% if tz_value == selected_tz %}{% set ns.found = true %}{% endif %}
+                            <option value="{{ tz_value }}" {% if tz_value==selected_tz %}selected{% endif %}>{{
+                                tz_label }}</option>
+                            {% endfor %}
+                            {% if selected_tz and not ns.found %}
+                            <option value="{{ selected_tz }}" selected>{{ selected_tz }} (custom)</option>
+                            {% endif %}
+                        </select>
+                    </label>
+                    <label>
+                        Starts on
+                        <input name="recurrence_start_date" type="date" required />
+                    </label>
+                    <label>
+                        Pre-create upcoming meetings
+                        <input class="input-compact" name="generate_count" type="number" min="1" max="200" value="10"
+                            required />
+                        <small>How many future meetings to create now.</small>
+                    </label>
+                    <label>
+                        Reminder lead (minutes)
+                        <input name="reminder_minutes_before" type="number" min="0" max="43200" value="60" required />
+                    </label>
+                </div>
+            </div>
             <div class="span-all">
-                <label for="attendee-emails">Attendees</label>
+                <label for="attendee-query">Attendees</label>
+                <input id="attendee-emails" name="attendee_emails" type="hidden" value="" />
+                <div id="selected-attendees" class="attendee-chip-list" aria-live="polite"></div>
                 <div class="typeahead">
-                    <input id="attendee-emails" name="attendee_emails" type="text"
-                        placeholder="Start typing name or email; separate with commas"
-                        hx-get="/series/attendee-suggestions" hx-trigger="keyup changed delay:250ms"
-                        hx-target="#attendee-suggestions" hx-swap="innerHTML"
-                        onblur="window.setTimeout(() => window.agendableClearAttendeeSuggestions(), 120)"
-                        autocomplete="off" />
+                    <input id="attendee-query" name="q" type="text"
+                        placeholder="Start typing name or email to add attendees" hx-get="/series/attendee-suggestions"
+                        hx-trigger="keyup changed delay:250ms" hx-target="#attendee-suggestions" hx-swap="innerHTML"
+                        hx-include="#attendee-emails" autocomplete="off" />
                     <div id="attendee-suggestions" class="typeahead-panel">
                         {% include "partials/series_attendee_suggestions.html" %}
                     </div>
                 </div>
             </div>
 
-            <button type="submit">Create</button>
+            <div class="span-all create-series-actions">
+                <button type="submit">Create series</button>
+            </div>
         </form>
     </section>
 
@@ -104,159 +114,5 @@
     {% endif %}
 </section>
 
-<script>
-    (() => {
-        let attendeeSuggestionIndex = -1;
-
-        const getAttendeeSuggestionButtons = () => {
-            const container = document.getElementById("attendee-suggestions");
-            if (!container) {
-                return [];
-            }
-            return Array.from(container.querySelectorAll("button[data-attendee-email]"));
-        };
-
-        const setAttendeeSuggestionIndex = (index) => {
-            const buttons = getAttendeeSuggestionButtons();
-            attendeeSuggestionIndex = index;
-
-            buttons.forEach((button, buttonIndex) => {
-                button.classList.toggle("typeahead-active", buttonIndex === attendeeSuggestionIndex);
-            });
-
-            if (attendeeSuggestionIndex >= 0 && attendeeSuggestionIndex < buttons.length) {
-                buttons[attendeeSuggestionIndex].scrollIntoView({ block: "nearest" });
-            }
-        };
-
-        window.agendableClearAttendeeSuggestions = () => {
-            const suggestions = document.getElementById("attendee-suggestions");
-            if (suggestions) {
-                suggestions.innerHTML = "";
-            }
-            attendeeSuggestionIndex = -1;
-        };
-
-        window.agendableAddAttendeeEmail = (email) => {
-            const attendeesInput = document.getElementById("attendee-emails");
-            const suggestions = document.getElementById("attendee-suggestions");
-            if (!attendeesInput) return;
-
-            const normalizedEmail = String(email).toLowerCase();
-            const existing = attendeesInput.value
-                .split(",")
-                .map((value) => value.trim().toLowerCase())
-                .filter((value) => value.length > 0);
-
-            const isDuplicate = existing.includes(normalizedEmail);
-
-            if (!isDuplicate) {
-                const pieces = attendeesInput.value.split(",");
-                pieces[pieces.length - 1] = ` ${normalizedEmail}`;
-                attendeesInput.value = pieces
-                    .map((value) => value.trim())
-                    .filter((value) => value.length > 0)
-                    .join(", ");
-            }
-
-            attendeesInput.value = attendeesInput.value.replace(/\s*,\s*/g, ", ");
-            if (attendeesInput.value && !attendeesInput.value.endsWith(", ")) {
-                attendeesInput.value = `${attendeesInput.value}, `;
-            }
-
-            attendeesInput.focus();
-            if (suggestions) {
-                suggestions.innerHTML = "";
-            }
-        };
-
-        document.addEventListener("pointerdown", (event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) {
-                return;
-            }
-
-            const button = target.closest("button[data-attendee-email]");
-            if (!(button instanceof HTMLButtonElement)) {
-                return;
-            }
-
-            event.preventDefault();
-            const email = button.dataset.attendeeEmail;
-            if (!email) {
-                return;
-            }
-
-            window.agendableAddAttendeeEmail(email);
-        });
-
-        const attendeesInput = document.getElementById("attendee-emails");
-        if (attendeesInput instanceof HTMLInputElement) {
-            attendeesInput.addEventListener("keydown", (event) => {
-                const buttons = getAttendeeSuggestionButtons();
-                if (buttons.length == 0) {
-                    if (event.key === "Escape") {
-                        window.agendableClearAttendeeSuggestions();
-                    }
-                    return;
-                }
-
-                if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    const nextIndex =
-                        attendeeSuggestionIndex < 0
-                            ? 0
-                            : (attendeeSuggestionIndex + 1) % buttons.length;
-                    setAttendeeSuggestionIndex(nextIndex);
-                    return;
-                }
-
-                if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    const nextIndex =
-                        attendeeSuggestionIndex < 0
-                            ? buttons.length - 1
-                            : (attendeeSuggestionIndex - 1 + buttons.length) % buttons.length;
-                    setAttendeeSuggestionIndex(nextIndex);
-                    return;
-                }
-
-                if (event.key === "Enter") {
-                    if (attendeeSuggestionIndex >= 0 && attendeeSuggestionIndex < buttons.length) {
-                        event.preventDefault();
-                        const email = buttons[attendeeSuggestionIndex].dataset.attendeeEmail;
-                        if (email) {
-                            window.agendableAddAttendeeEmail(email);
-                        }
-                    }
-                    return;
-                }
-
-                if (event.key === "Escape") {
-                    event.preventDefault();
-                    window.agendableClearAttendeeSuggestions();
-                }
-            });
-        }
-
-        document.body.addEventListener("htmx:afterSwap", (event) => {
-            const target = event.target;
-            if (!(target instanceof HTMLElement) || target.id !== "attendee-suggestions") {
-                return;
-            }
-            attendeeSuggestionIndex = -1;
-        });
-
-        const tzInput = document.getElementById("recurrence-timezone");
-        if (!tzInput) return;
-
-        const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (!systemTz) return;
-
-        const hasSystemTz = Array.from(tzInput.options).some((opt) => opt.value === systemTz);
-        if (hasSystemTz && (!tzInput.value || tzInput.value === "UTC")) {
-            tzInput.value = systemTz;
-        }
-    })();
-</script>
+<script src="/static/create_series.js"></script>
 {% endblock %}

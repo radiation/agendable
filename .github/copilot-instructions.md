@@ -16,8 +16,10 @@ This repo is a Python web app for tracking agenda items and tasks for recurring 
 - Use SQLAlchemy 2.0 typed ORM (`Mapped[...]`, `mapped_column`, `DeclarativeBase`).
 - Validate inputs using Pydantic models or FastAPI form params.
 - Maintain strict typing (`mypy --strict`) and lint/format with Ruff.
-- Do not add heavy frontend frameworks; HTMX-first. Alpine.js may be introduced later.
+- Do not add heavy frontend frameworks; HTMX-first.
+- Alpine.js is allowed for lightweight client-side state (toggle/filter/disclosure interactions) when it reduces in-meeting friction.
 - For refactors that move/delete files, prefer `git mv` and `git rm` when possible to preserve clearer history and rename tracking.
+- As much as possible, DB calls should go the repository layer and business logic should be separate from route handlers; avoid mixing DB calls and business logic directly in routes.
 
 ## UX constraints
 

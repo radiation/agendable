@@ -17,7 +17,20 @@ from agendable.services.google_imported_series_service import (
     ImportedSeriesNotFoundError,
     MissingGoogleCalendarConnectionError,
 )
-from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
+from agendable.services.occurrence_service import (
+    OccurrenceAgendaItemNotFoundError,
+    OccurrenceNotFoundError,
+    OccurrenceTaskNotFoundError,
+    add_agenda_item_for_occurrence,
+    add_attendee_by_email,
+    complete_occurrence_and_roll_forward,
+    convert_agenda_item_to_task,
+    create_task_for_occurrence,
+    get_agenda_item_with_occurrence,
+    get_task_with_occurrence,
+    toggle_agenda_item_done,
+    toggle_task_done,
+)
 from agendable.services.oidc_service import (
     OidcLinkResolution,
     OidcLoginResolution,
@@ -27,7 +40,6 @@ from agendable.services.oidc_service import (
 )
 from agendable.services.reminder_claim_service import claim_reminder_attempt
 from agendable.services.reminder_delivery_service import run_due_reminders
-from agendable.services.series_service import create_series_with_occurrences
 
 __all__ = [
     "CalendarEventMappingService",
@@ -41,15 +53,25 @@ __all__ = [
     "GoogleImportedSeriesService",
     "ImportedSeriesNotFoundError",
     "MissingGoogleCalendarConnectionError",
+    "OccurrenceAgendaItemNotFoundError",
+    "OccurrenceNotFoundError",
+    "OccurrenceTaskNotFoundError",
     "OidcLinkResolution",
     "OidcLoginResolution",
+    "add_agenda_item_for_occurrence",
+    "add_attendee_by_email",
     "claim_reminder_attempt",
     "complete_occurrence_and_roll_forward",
-    "create_series_with_occurrences",
+    "convert_agenda_item_to_task",
+    "create_task_for_occurrence",
+    "get_agenda_item_with_occurrence",
+    "get_task_with_occurrence",
     "provision_user_for_oidc",
     "resolve_oidc_link_resolution",
     "resolve_oidc_login_resolution",
     "run_due_reminders",
     "should_capture_google_calendar_token",
+    "toggle_agenda_item_done",
+    "toggle_task_done",
     "upsert_google_primary_calendar_connection",
 ]

@@ -7,14 +7,32 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil.rrule import rrulestr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agendable.db.models import MeetingOccurrence
+from agendable.db.models import AgendaItem, MeetingOccurrence, Task, User
 from agendable.db.repos import (
     AgendaItemRepository,
+    MeetingOccurrenceAttendeeRepository,
     MeetingOccurrenceRepository,
     MeetingSeriesRepository,
     TaskRepository,
+    UserRepository,
 )
 from agendable.recurrence import normalize_rrule
+
+
+class OccurrenceTaskNotFoundError(Exception):
+    pass
+
+
+class OccurrenceAgendaItemNotFoundError(Exception):
+    pass
+
+
+class OccurrenceNotFoundError(Exception):
+    pass
+
+
+class OccurrenceAssigneeNotFoundError(Exception):
+    pass
 
 
 def _coerce_tzinfo(*, dtstart_tzinfo: tzinfo | None, timezone_name: str) -> tzinfo:
@@ -152,3 +170,145 @@ async def complete_occurrence_and_roll_forward(
     else:
         await session.flush()
     return next_occurrence
+
+
+async def create_task_for_occurrence(
+    session: AsyncSession,
+    *,
+    occurrence_id: uuid.UUID,
+    title: str,
+    description: str | None,
+    assigned_user_id: uuid.UUID,
+    due_at: datetime,
+) -> Task:
+    task = Task(
+        occurrence_id=occurrence_id,
+        title=title,
+        description=description,
+        assigned_user_id=assigned_user_id,
+        due_at=due_at,
+    )
+    session.add(task)
+    await session.commit()
+    return task
+
+
+async def add_attendee_by_email(
+    session: AsyncSession,
+    *,
+    occurrence_id: uuid.UUID,
+    email: str,
+) -> tuple[User | None, bool]:
+    users_repo = UserRepository(session)
+    attendee = await users_repo.get_by_email(email)
+    if attendee is None:
+        return None, False
+
+    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
+    existing = await attendee_repo.get_by_occurrence_and_user(occurrence_id, attendee.id)
+    if existing is not None:
+        return attendee, False
+
+    await attendee_repo.add_link(
+        occurrence_id=occurrence_id,
+        user_id=attendee.id,
+        flush=False,
+    )
+    await session.commit()
+    return attendee, True
+
+
+async def get_task_with_occurrence(
+    session: AsyncSession,
+    *,
+    task_id: uuid.UUID,
+) -> tuple[Task, MeetingOccurrence]:
+    tasks_repo = TaskRepository(session)
+    task = await tasks_repo.get_by_id(task_id)
+    if task is None:
+        raise OccurrenceTaskNotFoundError
+
+    occ_repo = MeetingOccurrenceRepository(session)
+    occurrence = await occ_repo.get_by_id(task.occurrence_id)
+    if occurrence is None:
+        raise OccurrenceNotFoundError
+
+    return task, occurrence
+
+
+async def toggle_task_done(
+    session: AsyncSession,
+    *,
+    task: Task,
+) -> None:
+
+    task.is_done = not task.is_done
+    await session.commit()
+
+
+async def add_agenda_item_for_occurrence(
+    session: AsyncSession,
+    *,
+    occurrence_id: uuid.UUID,
+    body: str,
+    description: str | None,
+) -> AgendaItem:
+    item = AgendaItem(
+        occurrence_id=occurrence_id,
+        body=body,
+        description=description,
+    )
+    session.add(item)
+    await session.commit()
+    return item
+
+
+async def get_agenda_item_with_occurrence(
+    session: AsyncSession,
+    *,
+    item_id: uuid.UUID,
+) -> tuple[AgendaItem, MeetingOccurrence]:
+    agenda_repo = AgendaItemRepository(session)
+    item = await agenda_repo.get_by_id(item_id)
+    if item is None:
+        raise OccurrenceAgendaItemNotFoundError
+
+    occ_repo = MeetingOccurrenceRepository(session)
+    occurrence = await occ_repo.get_by_id(item.occurrence_id)
+    if occurrence is None:
+        raise OccurrenceNotFoundError
+
+    return item, occurrence
+
+
+async def convert_agenda_item_to_task(
+    session: AsyncSession,
+    *,
+    item: AgendaItem,
+    occurrence: MeetingOccurrence,
+    assigned_user_id: uuid.UUID,
+    due_at: datetime,
+) -> Task:
+
+    title = item.body.strip() if item.body.strip() else "Agenda follow-up"
+    task = Task(
+        occurrence_id=occurrence.id,
+        title=title,
+        description=item.description,
+        assigned_user_id=assigned_user_id,
+        due_at=due_at,
+    )
+    item.is_done = True
+    session.add(task)
+    await session.commit()
+    return task
+
+
+async def toggle_agenda_item_done(
+    session: AsyncSession,
+    *,
+    item: AgendaItem,
+) -> None:
+
+    item.is_done = not item.is_done
+    await session.commit()

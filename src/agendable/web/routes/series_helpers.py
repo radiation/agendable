@@ -8,13 +8,19 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import MeetingOccurrence, MeetingSeries, User
-from agendable.db.repos import (
-    MeetingOccurrenceAttendeeRepository,
-    MeetingOccurrenceRepository,
-    MeetingSeriesRepository,
-    UserRepository,
-)
 from agendable.recurrence import build_rrule
+from agendable.services.series_view_service import (
+    add_missing_attendee_links as add_missing_attendee_links_service,
+)
+from agendable.services.series_view_service import (
+    existing_attendee_occurrence_ids as existing_attendee_occurrence_ids_service,
+)
+from agendable.services.series_view_service import (
+    get_owned_series,
+    list_series_occurrences,
+    resolve_attendee_user,
+    select_active_occurrence,
+)
 from agendable.web.routes.common import recurrence_label, templates
 
 VALID_RECURRENCE_FREQS = {"DAILY", "WEEKLY", "MONTHLY"}
@@ -116,25 +122,19 @@ async def render_series_detail(
     attendee_form: dict[str, str] | None = None,
     attendee_form_errors: dict[str, str] | None = None,
 ) -> HTMLResponse:
-    series_repo = MeetingSeriesRepository(session)
-    series = await series_repo.get_for_owner(series_id, current_user.id)
+    series = await get_owned_series(
+        session,
+        series_id=series_id,
+        owner_user_id=current_user.id,
+    )
     if series is None:
         raise HTTPException(status_code=404)
 
-    occ_repo = MeetingOccurrenceRepository(session)
-    occurrences = await occ_repo.list_for_series(series_id)
-
-    active_occurrence: MeetingOccurrence | None = None
-    now = datetime.now(UTC)
-    for occurrence in occurrences:
-        scheduled_at = occurrence.scheduled_at
-        if scheduled_at.tzinfo is None:
-            scheduled_at = scheduled_at.replace(tzinfo=UTC)
-        if scheduled_at >= now:
-            active_occurrence = occurrence
-            break
-    if active_occurrence is None and occurrences:
-        active_occurrence = occurrences[-1]
+    occurrences = await list_series_occurrences(session, series_id=series_id)
+    active_occurrence: MeetingOccurrence | None = select_active_occurrence(
+        occurrences,
+        now=datetime.now(UTC),
+    )
 
     selected_attendee_form = {"email": ""}
     if attendee_form is not None:
@@ -166,8 +166,11 @@ async def get_owned_series_or_404(
     series_id: uuid.UUID,
     owner_user_id: uuid.UUID,
 ) -> MeetingSeries:
-    series_repo = MeetingSeriesRepository(session)
-    series = await series_repo.get_for_owner(series_id, owner_user_id)
+    series = await get_owned_series(
+        session,
+        series_id=series_id,
+        owner_user_id=owner_user_id,
+    )
     if series is None:
         raise HTTPException(status_code=404)
     return series
@@ -177,8 +180,7 @@ async def resolve_series_attendee_user(
     session: AsyncSession,
     email: str,
 ) -> User | None:
-    users_repo = UserRepository(session)
-    return await users_repo.get_by_email(email)
+    return await resolve_attendee_user(session, email=email)
 
 
 async def existing_attendee_occurrence_ids(
@@ -187,9 +189,9 @@ async def existing_attendee_occurrence_ids(
     attendee_user_id: uuid.UUID,
     occurrence_ids: list[uuid.UUID],
 ) -> set[uuid.UUID]:
-    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
-    return await attendee_repo.list_occurrence_ids_for_user(
-        user_id=attendee_user_id,
+    return await existing_attendee_occurrence_ids_service(
+        session,
+        attendee_user_id=attendee_user_id,
         occurrence_ids=occurrence_ids,
     )
 
@@ -201,9 +203,9 @@ async def add_missing_attendee_links(
     occurrence_ids: list[uuid.UUID],
     existing_occurrence_ids: set[uuid.UUID],
 ) -> int:
-    attendee_repo = MeetingOccurrenceAttendeeRepository(session)
-    return await attendee_repo.add_missing_links(
-        user_id=attendee_user_id,
+    return await add_missing_attendee_links_service(
+        session,
+        attendee_user_id=attendee_user_id,
         occurrence_ids=occurrence_ids,
         existing_occurrence_ids=existing_occurrence_ids,
     )

@@ -11,8 +11,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
-from agendable.db.models import ExternalCalendarConnection, ExternalIdentity, User
-from agendable.db.repos import ExternalCalendarConnectionRepository
+from agendable.db.models import ExternalCalendarConnection, User
 from agendable.logging_config import log_with_fields
 from agendable.providers import (
     build_google_calendar_sync_service as build_google_calendar_sync_service_provider,
@@ -26,11 +25,13 @@ from agendable.security.audit_constants import (
     OIDC_REASON_OAUTH_ERROR,
     OIDC_REASON_RATE_LIMITED,
 )
-from agendable.services.calendar_connection_service import (
-    should_capture_google_calendar_token,
-    upsert_google_primary_calendar_connection,
-)
+from agendable.services.auth_service import AuthService
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
+from agendable.services.oidc_persistence_service import (
+    commit_oidc_session,
+    create_oidc_identity_if_needed,
+    maybe_upsert_google_primary_connection,
+)
 from agendable.services.oidc_service import (
     OidcLoginResolution,
     is_email_allowed_for_domain,
@@ -51,16 +52,6 @@ from agendable.web.routes.auth.oidc_link_flow import render_link_error
 from agendable.web.routes.auth.rate_limits import is_oidc_callback_rate_limited
 
 logger = logging.getLogger("uvicorn.error")
-
-
-def auth_oidc_enabled() -> bool:
-    enabled_fn = getattr(auth_routes, "_oidc_enabled", auth_routes.oidc_enabled)
-    return enabled_fn()
-
-
-def auth_oidc_oauth_client() -> OidcClient:
-    client_fn = getattr(auth_routes, "_oidc_oauth_client", auth_routes.oidc_oauth_client)
-    return client_fn()
 
 
 def _login_redirect() -> RedirectResponse:
@@ -140,15 +131,14 @@ async def handle_login_callback(
         debug_oidc=debug_oidc,
     )
 
-    if allow_google_calendar_token_capture and should_capture_google_calendar_token(
-        settings=settings, token_capture=token_capture
-    ):
-        connection_repo = ExternalCalendarConnectionRepository(session)
-        connection = await upsert_google_primary_calendar_connection(
-            connection_repo=connection_repo,
-            user=user,
-            token_capture=token_capture,
-        )
+    connection = await maybe_upsert_google_primary_connection(
+        session,
+        user=user,
+        allow_google_calendar_token_capture=allow_google_calendar_token_capture,
+        token_capture=token_capture,
+        settings=settings,
+    )
+    if connection is not None:
         await _maybe_auto_sync_new_connection(
             session=session,
             settings=settings,
@@ -166,8 +156,8 @@ async def handle_login_callback(
             link_mode=link_user_id is not None,
         )
 
-    await auth_routes.maybe_promote_bootstrap_admin(user, session)
-    await session.commit()
+    await auth_routes.maybe_promote_bootstrap_admin_flush_only(user, session)
+    await commit_oidc_session(session)
 
     request.session["user_id"] = str(user.id)
     audit_oidc_success(
@@ -225,19 +215,22 @@ async def _create_login_identity_if_needed(
     email: str,
     debug_oidc: bool,
 ) -> None:
-    if not create_identity:
-        return
-
     if debug_oidc:
         logger.info("OIDC callback linking or creating SSO identity for email=%s", email)
-    ext = ExternalIdentity(user_id=user.id, provider=identity_provider, subject=sub, email=email)
-    session.add(ext)
-    await session.flush()
+    await create_oidc_identity_if_needed(
+        session,
+        user=user,
+        create_identity=create_identity,
+        identity_provider=identity_provider,
+        sub=sub,
+        email=email,
+    )
 
 
 async def _exchange_token_or_error(
     request: Request,
     *,
+    auth_service: AuthService,
     oidc_client: OidcClient,
     debug_oidc: bool,
     link_user_id: uuid.UUID | None,
@@ -256,7 +249,7 @@ async def _exchange_token_or_error(
         if link_user_id is not None:
             return await render_link_error(
                 request,
-                session=session,
+                auth_service=auth_service,
                 link_user_id=link_user_id,
                 message="SSO linking was cancelled or failed.",
                 status_code=400,
@@ -269,6 +262,7 @@ async def _exchange_token_or_error(
 async def _parse_and_validate_claims_or_error(
     request: Request,
     *,
+    auth_service: AuthService,
     oidc_client: OidcClient,
     token: dict[str, object],
     debug_oidc: bool,
@@ -312,7 +306,7 @@ async def _parse_and_validate_claims_or_error(
     if link_user_id is not None:
         return await render_link_error(
             request,
-            session=session,
+            auth_service=auth_service,
             link_user_id=link_user_id,
             message="SSO provider did not return required identity claims.",
             status_code=403,
@@ -323,6 +317,7 @@ async def _parse_and_validate_claims_or_error(
 async def extract_oidc_identity_or_response(
     request: Request,
     *,
+    auth_service: AuthService,
     oidc_client: OidcClient,
     debug_oidc: bool,
     link_user_id: uuid.UUID | None,
@@ -330,6 +325,7 @@ async def extract_oidc_identity_or_response(
 ) -> tuple[str, str, Mapping[str, object], OidcTokenCapture] | Response:
     token_or_response = await _exchange_token_or_error(
         request,
+        auth_service=auth_service,
         oidc_client=oidc_client,
         debug_oidc=debug_oidc,
         link_user_id=link_user_id,
@@ -340,6 +336,7 @@ async def extract_oidc_identity_or_response(
 
     claims_or_response = await _parse_and_validate_claims_or_error(
         request,
+        auth_service=auth_service,
         oidc_client=oidc_client,
         token=token_or_response,
         debug_oidc=debug_oidc,
@@ -385,6 +382,7 @@ def domain_block_response(
 async def rate_limit_block_response(
     request: Request,
     *,
+    auth_service: AuthService,
     settings: Settings,
     link_user_id: uuid.UUID | None,
     email: str,
@@ -404,7 +402,7 @@ async def rate_limit_block_response(
     if link_user_id is not None:
         return await render_link_error(
             request,
-            session=session,
+            auth_service=auth_service,
             link_user_id=link_user_id,
             message="Too many SSO attempts. Try again in a minute.",
             status_code=429,

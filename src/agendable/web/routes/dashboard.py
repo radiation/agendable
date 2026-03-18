@@ -7,8 +7,8 @@ from fastapi.responses import HTMLResponse
 
 from agendable.auth import require_user
 from agendable.db.models import User
+from agendable.dependencies import get_dashboard_service
 from agendable.services.dashboard_service import DashboardService
-from agendable.web.dependencies import get_dashboard_service
 from agendable.web.routes.common import templates
 
 router = APIRouter()

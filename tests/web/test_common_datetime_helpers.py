@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 import pytest
 from fastapi import HTTPException
 
+from agendable.datetime_utils import format_datetime_local_value
 from agendable.web.routes.common import (
     format_datetime_for_timezone,
-    format_datetime_local_value,
     parse_dt,
     parse_dt_for_timezone,
     parse_timezone,

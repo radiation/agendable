@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from agendable.db.models import MeetingOccurrenceAttendee
 from agendable.db.repos.base import BaseRepository
@@ -70,3 +71,23 @@ class MeetingOccurrenceAttendeeRepository(BaseRepository[MeetingOccurrenceAttend
             await self.add_link(occurrence_id=occurrence_id, user_id=user_id, flush=False)
             added_count += 1
         return added_count
+
+    async def has_occurrence_user_link(
+        self,
+        *,
+        occurrence_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> bool:
+        link = await self.get_by_occurrence_and_user(occurrence_id, user_id)
+        return link is not None
+
+    async def list_for_occurrence_with_users(
+        self,
+        occurrence_id: uuid.UUID,
+    ) -> list[MeetingOccurrenceAttendee]:
+        result = await self.session.execute(
+            select(MeetingOccurrenceAttendee)
+            .options(selectinload(MeetingOccurrenceAttendee.user))
+            .where(MeetingOccurrenceAttendee.occurrence_id == occurrence_id)
+        )
+        return list(result.scalars().all())

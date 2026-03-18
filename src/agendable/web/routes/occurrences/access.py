@@ -3,20 +3,25 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from agendable.db.models import (
     MeetingOccurrence,
-    MeetingOccurrenceAttendee,
     MeetingSeries,
     User,
 )
-from agendable.db.repos import (
-    MeetingOccurrenceRepository,
-    MeetingSeriesRepository,
-    UserRepository,
+from agendable.services.occurrence_access_service import (
+    assignee_exists,
+    is_occurrence_attendee,
+)
+from agendable.services.occurrence_access_service import (
+    get_accessible_occurrence as get_accessible_occurrence_service,
+)
+from agendable.services.occurrence_access_service import (
+    get_owned_occurrence as get_owned_occurrence_service,
+)
+from agendable.services.occurrence_access_service import (
+    list_occurrence_attendee_users as list_occurrence_attendee_users_service,
 )
 
 
@@ -42,14 +47,12 @@ async def get_owned_occurrence(
     occurrence_id: uuid.UUID,
     owner_user_id: uuid.UUID,
 ) -> tuple[MeetingOccurrence, MeetingSeries]:
-    occ_repo = MeetingOccurrenceRepository(session)
-    occurrence = await occ_repo.get_by_id(occurrence_id)
-    if occurrence is None:
-        raise HTTPException(status_code=404)
-
-    series_repo = MeetingSeriesRepository(session)
-    series = await series_repo.get_for_owner(occurrence.series_id, owner_user_id)
-    if series is None:
+    occurrence, series = await get_owned_occurrence_service(
+        session,
+        occurrence_id=occurrence_id,
+        owner_user_id=owner_user_id,
+    )
+    if occurrence is None or series is None:
         raise HTTPException(status_code=404)
 
     return occurrence, series
@@ -60,31 +63,12 @@ async def get_accessible_occurrence(
     occurrence_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> tuple[MeetingOccurrence, MeetingSeries]:
-    occ_repo = MeetingOccurrenceRepository(session)
-    occurrence = await occ_repo.get_by_id(occurrence_id)
-    if occurrence is None:
-        raise HTTPException(status_code=404)
-
-    series_repo = MeetingSeriesRepository(session)
-    owner_series = await series_repo.get_for_owner(occurrence.series_id, user_id)
-    if owner_series is not None:
-        return occurrence, owner_series
-
-    attendee_link = (
-        await session.execute(
-            select(MeetingOccurrenceAttendee).where(
-                MeetingOccurrenceAttendee.occurrence_id == occurrence.id,
-                MeetingOccurrenceAttendee.user_id == user_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if attendee_link is None:
-        raise HTTPException(status_code=404)
-
-    series = (
-        await session.execute(select(MeetingSeries).where(MeetingSeries.id == occurrence.series_id))
-    ).scalar_one_or_none()
-    if series is None:
+    occurrence, series = await get_accessible_occurrence_service(
+        session,
+        occurrence_id=occurrence_id,
+        user_id=user_id,
+    )
+    if occurrence is None or series is None:
         raise HTTPException(status_code=404)
 
     return occurrence, series
@@ -95,27 +79,11 @@ async def list_occurrence_attendee_users(
     occurrence_id: uuid.UUID,
     current_user: User,
 ) -> list[User]:
-    attendee_links = list(
-        (
-            await session.execute(
-                select(MeetingOccurrenceAttendee)
-                .options(selectinload(MeetingOccurrenceAttendee.user))
-                .where(MeetingOccurrenceAttendee.occurrence_id == occurrence_id)
-            )
-        )
-        .scalars()
-        .all()
+    return await list_occurrence_attendee_users_service(
+        session,
+        occurrence_id=occurrence_id,
+        current_user=current_user,
     )
-
-    attendee_users = [current_user]
-    attendee_user_ids: set[uuid.UUID] = {current_user.id}
-    for link in attendee_links:
-        if link.user_id in attendee_user_ids:
-            continue
-        attendee_users.append(link.user)
-        attendee_user_ids.add(link.user_id)
-
-    return attendee_users
 
 
 async def validate_task_assignee(
@@ -126,22 +94,18 @@ async def validate_task_assignee(
     assignee_id: uuid.UUID,
     task_form_errors: dict[str, str],
 ) -> None:
-    users_repo = UserRepository(session)
-    assignee = await users_repo.get_by_id(assignee_id)
-    if assignee is None:
+    exists = await assignee_exists(session, assignee_id=assignee_id)
+    if not exists:
         task_form_errors["assigned_user_id"] = "Choose a valid assignee."
         return
 
     if assignee_id == series_owner_user_id:
         return
 
-    attendee_link = (
-        await session.execute(
-            select(MeetingOccurrenceAttendee).where(
-                MeetingOccurrenceAttendee.occurrence_id == occurrence_id,
-                MeetingOccurrenceAttendee.user_id == assignee_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if attendee_link is None:
+    attendee = await is_occurrence_attendee(
+        session,
+        occurrence_id=occurrence_id,
+        user_id=assignee_id,
+    )
+    if not attendee:
         task_form_errors["assigned_user_id"] = "Assignee must be a meeting attendee."

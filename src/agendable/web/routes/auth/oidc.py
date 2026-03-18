@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -10,12 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user, verify_password
-from agendable.db import get_session
 from agendable.db.models import (
-    CalendarProvider,
     User,
 )
-from agendable.db.repos import ExternalCalendarConnectionRepository, ExternalIdentityRepository
+from agendable.dependencies import (
+    get_auth_service,
+    get_google_imported_series_service,
+    get_session,
+)
 from agendable.logging_config import log_with_fields
 from agendable.providers import build_google_calendar_sync_service
 from agendable.security.audit import audit_oidc_denied, audit_oidc_success
@@ -29,12 +30,20 @@ from agendable.security.audit_constants import (
     OIDC_REASON_PROVIDER_DISABLED,
     OIDC_REASON_RATE_LIMITED,
 )
-from agendable.services.google_calendar_client import GoogleCalendarHttpClient
-from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
+from agendable.services.auth_service import AuthService
+from agendable.services.google_calendar_sync_service import (
+    GoogleCalendarConnectionNotFoundError,
+    GoogleCalendarSyncService,
+)
 from agendable.services.google_imported_series_service import (
     GoogleImportedSeriesService,
     ImportedSeriesNotFoundError,
     MissingGoogleCalendarConnectionError,
+)
+from agendable.services.oidc_service import (
+    OidcIdentityNotFoundError,
+    OidcOnlySignInMethodError,
+    unlink_oidc_identity_for_user,
 )
 from agendable.settings import get_settings
 from agendable.sso.oidc.flow import (
@@ -42,10 +51,8 @@ from agendable.sso.oidc.flow import (
     get_oidc_link_user_id,
     set_oidc_link_user_id,
 )
-from agendable.web.dependencies import (
-    get_google_imported_series_service,
-)
 from agendable.web.routes import auth as auth_routes
+from agendable.web.routes.auth import seams as auth_seams
 from agendable.web.routes.auth.oidc_callbacks import (
     auth_oidc_enabled,
     auth_oidc_oauth_client,
@@ -60,23 +67,15 @@ from agendable.web.routes.auth.rate_limits import is_identity_link_start_rate_li
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-
-def build_google_calendar_client() -> GoogleCalendarHttpClient:
-    settings = get_settings()
-    return GoogleCalendarHttpClient(
-        api_base_url=settings.google_calendar_api_base_url,
-        initial_sync_days_back=settings.google_calendar_initial_sync_days_back,
-    )
-
-
-def get_google_calendar_sync_service(session: SessionDep) -> GoogleCalendarSyncService:
+def get_google_calendar_sync_service(
+    session: AsyncSession = Depends(get_session),
+) -> GoogleCalendarSyncService:
     settings = get_settings()
     return build_google_calendar_sync_service(
         session=session,
         settings=settings,
-        calendar_client=build_google_calendar_client(),
+        calendar_client=auth_seams.build_google_calendar_client(),
     )
 
 
@@ -111,7 +110,7 @@ async def oidc_start(request: Request) -> Response:
 @router.get("/auth/oidc/keycloak/start", response_class=RedirectResponse)
 async def keycloak_oidc_start(request: Request) -> Response:
     settings = get_settings()
-    if not auth_routes.keycloak_oidc_enabled():
+    if not auth_seams.keycloak_oidc_enabled():
         if settings.oidc_debug_logging:
             logger.info("Keycloak OIDC start aborted: provider is disabled")
         raise HTTPException(status_code=404)
@@ -125,12 +124,7 @@ async def keycloak_oidc_start(request: Request) -> Response:
             redirect_uri=redirect_uri,
         )
 
-    client_fn = getattr(
-        auth_routes,
-        "_keycloak_oidc_oauth_client",
-        auth_routes.keycloak_oidc_oauth_client,
-    )
-    oidc_client = client_fn()
+    oidc_client = auth_seams.keycloak_oidc_oauth_client()
     authorize_params = build_authorize_params(settings.oidc_auth_prompt)
     return await oidc_client.authorize_redirect(request, redirect_uri, **authorize_params)
 
@@ -139,6 +133,7 @@ async def keycloak_oidc_start(request: Request) -> Response:
 async def oidc_callback(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> Response:
     settings = get_settings()
     debug_oidc = settings.oidc_debug_logging
@@ -152,6 +147,7 @@ async def oidc_callback(
 
     identity_or_response = await extract_oidc_identity_or_response(
         request,
+        auth_service=auth_service,
         oidc_client=auth_oidc_oauth_client(),
         debug_oidc=debug_oidc,
         link_user_id=link_user_id,
@@ -173,6 +169,7 @@ async def oidc_callback(
 
     rate_limit_error = await rate_limit_block_response(
         request,
+        auth_service=auth_service,
         settings=settings,
         link_user_id=link_user_id,
         email=email,
@@ -185,6 +182,7 @@ async def oidc_callback(
         return await handle_link_callback(
             request,
             session=session,
+            auth_service=auth_service,
             identity_provider="oidc",
             allow_google_calendar_token_capture=True,
             link_user_id=link_user_id,
@@ -214,26 +212,22 @@ async def oidc_callback(
 async def keycloak_oidc_callback(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> Response:
     settings = get_settings()
     debug_oidc = settings.oidc_debug_logging
     link_user_id = get_oidc_link_user_id(request)
 
-    if not auth_routes.keycloak_oidc_enabled():
+    if not auth_seams.keycloak_oidc_enabled():
         audit_oidc_denied(event=OIDC_EVENT_CALLBACK, reason=OIDC_REASON_PROVIDER_DISABLED)
         if debug_oidc:
             logger.info("Keycloak OIDC callback aborted: provider is disabled")
         raise HTTPException(status_code=404)
 
-    client_fn = getattr(
-        auth_routes,
-        "_keycloak_oidc_oauth_client",
-        auth_routes.keycloak_oidc_oauth_client,
-    )
-
     identity_or_response = await extract_oidc_identity_or_response(
         request,
-        oidc_client=client_fn(),
+        auth_service=auth_service,
+        oidc_client=auth_seams.keycloak_oidc_oauth_client(),
         debug_oidc=debug_oidc,
         link_user_id=link_user_id,
         session=session,
@@ -254,6 +248,7 @@ async def keycloak_oidc_callback(
 
     rate_limit_error = await rate_limit_block_response(
         request,
+        auth_service=auth_service,
         settings=settings,
         link_user_id=link_user_id,
         email=email,
@@ -266,6 +261,7 @@ async def keycloak_oidc_callback(
         return await handle_link_callback(
             request,
             session=session,
+            auth_service=auth_service,
             identity_provider="keycloak",
             allow_google_calendar_token_capture=False,
             link_user_id=link_user_id,
@@ -299,35 +295,30 @@ async def sync_google_calendar_now(
     request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    auth_service: AuthService = Depends(get_auth_service),
     sync_service: GoogleCalendarSyncService = Depends(get_google_calendar_sync_service),
 ) -> Response:
     settings = get_settings()
     if not settings.google_calendar_sync_enabled:
         raise HTTPException(status_code=404)
 
-    user = await auth_routes.get_user_or_404(session, current_user.id)
-    connection_repo = ExternalCalendarConnectionRepository(session)
-    connection = await connection_repo.get_for_user_provider_calendar(
-        user_id=user.id,
-        provider=CalendarProvider.google,
-        external_calendar_id="primary",
-    )
-    if connection is None:
+    user = await auth_routes.get_user_or_404(auth_service, current_user.id)
+
+    try:
+        synced_event_count = await sync_service.sync_primary_calendar_for_user(user.id)
+    except GoogleCalendarConnectionNotFoundError:
         return await auth_routes.render_profile_template(
             request,
-            session=session,
+            auth_service=auth_service,
             user=user,
             identity_error="No Google Calendar connection found yet.",
             status_code=400,
         )
-
-    try:
-        synced_event_count = await sync_service.sync_connection(connection)
     except Exception:
         logger.exception("google calendar sync failed for user_id=%s", user.id)
         return await auth_routes.render_profile_template(
             request,
-            session=session,
+            auth_service=auth_service,
             user=user,
             identity_error="Google Calendar sync failed. Try again.",
             status_code=502,
@@ -354,13 +345,14 @@ async def keep_google_imported_series(
     series_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    auth_service: AuthService = Depends(get_auth_service),
     import_service: GoogleImportedSeriesService = Depends(get_google_imported_series_service),
 ) -> Response:
     settings = get_settings()
     if not settings.google_calendar_sync_enabled:
         raise HTTPException(status_code=404)
 
-    user = await auth_routes.get_user_or_404(session, current_user.id)
+    user = await auth_routes.get_user_or_404(auth_service, current_user.id)
 
     try:
         await import_service.keep_pending_google_series(
@@ -372,7 +364,7 @@ async def keep_google_imported_series(
     except MissingGoogleCalendarConnectionError:
         return await auth_routes.render_profile_template(
             request,
-            session=session,
+            auth_service=auth_service,
             user=user,
             identity_error="No Google Calendar connection found yet.",
             status_code=400,
@@ -415,6 +407,7 @@ async def start_profile_identity_link(
     password: str = Form(""),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> Response:
     if not auth_oidc_enabled():
         audit_oidc_denied(
@@ -424,7 +417,7 @@ async def start_profile_identity_link(
         )
         raise HTTPException(status_code=404)
 
-    user = await auth_routes.get_user_or_404(session, current_user.id)
+    user = await auth_routes.get_user_or_404(auth_service, current_user.id)
     if is_identity_link_start_rate_limited(request, user_id=user.id):
         audit_oidc_denied(
             event=OIDC_EVENT_IDENTITY_LINK_START,
@@ -433,7 +426,7 @@ async def start_profile_identity_link(
         )
         return await auth_routes.render_profile_template(
             request,
-            session=session,
+            auth_service=auth_service,
             user=user,
             identity_error="Too many link attempts. Try again in a minute.",
             status_code=429,
@@ -447,7 +440,7 @@ async def start_profile_identity_link(
         )
         return await auth_routes.render_profile_template(
             request,
-            session=session,
+            auth_service=auth_service,
             user=user,
             identity_error="Enter your current password to link an SSO account.",
             status_code=401,
@@ -455,7 +448,7 @@ async def start_profile_identity_link(
 
     set_oidc_link_user_id(request, user.id)
     audit_oidc_success(event=OIDC_EVENT_IDENTITY_LINK_START, actor=user)
-    if auth_routes.keycloak_oidc_enabled():
+    if auth_seams.keycloak_oidc_enabled():
         return RedirectResponse(url="/auth/oidc/keycloak/start", status_code=303)
     return RedirectResponse(url="/auth/oidc/start", status_code=303)
 
@@ -469,41 +462,41 @@ async def unlink_profile_identity(
     identity_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> Response:
-    user = await auth_routes.get_user_or_404(session, current_user.id)
-    ext_repo = ExternalIdentityRepository(session)
-
-    identity = await ext_repo.get(identity_id)
-    if identity is None or identity.user_id != user.id:
+    user = await auth_routes.get_user_or_404(auth_service, current_user.id)
+    try:
+        unlinked_identity_id = await unlink_oidc_identity_for_user(
+            session,
+            user=user,
+            identity_id=identity_id,
+        )
+    except OidcIdentityNotFoundError as exc:
         audit_oidc_denied(
             event=OIDC_EVENT_IDENTITY_UNLINK,
             reason=OIDC_REASON_IDENTITY_NOT_FOUND,
             actor=user,
             target_identity_id=identity_id,
         )
-        raise HTTPException(status_code=404)
-
-    identities = await ext_repo.list_by_user_id(user.id)
-    if user.password_hash is None and len(identities) <= 1:
+        raise HTTPException(status_code=404) from exc
+    except OidcOnlySignInMethodError:
         audit_oidc_denied(
             event=OIDC_EVENT_IDENTITY_UNLINK,
             reason=OIDC_REASON_ONLY_SIGN_IN_METHOD,
             actor=user,
-            target_identity_id=identity.id,
+            target_identity_id=identity_id,
         )
         return await auth_routes.render_profile_template(
             request,
-            session=session,
+            auth_service=auth_service,
             user=user,
             identity_error="You cannot unlink your only sign-in method.",
             status_code=400,
         )
 
-    await ext_repo.delete(identity, flush=False)
-    await session.commit()
     audit_oidc_success(
         event=OIDC_EVENT_IDENTITY_UNLINK,
         actor=user,
-        target_identity_id=identity.id,
+        target_identity_id=unlinked_identity_id,
     )
     return RedirectResponse(url="/profile", status_code=303)

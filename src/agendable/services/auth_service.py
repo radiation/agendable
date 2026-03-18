@@ -57,11 +57,10 @@ class AuthService:
         user: User,
         bootstrap_admin_email: str | None,
     ) -> bool:
-        if user.role == UserRole.admin:
-            return False
-        if bootstrap_admin_email is None:
-            return False
-        if bootstrap_admin_email.strip().lower() != user.email.strip().lower():
+        if not _should_promote_bootstrap_admin(
+            user=user,
+            bootstrap_admin_email=bootstrap_admin_email,
+        ):
             return False
 
         user.role = UserRole.admin
@@ -137,9 +136,8 @@ class AuthService:
         )
 
 
-async def maybe_promote_bootstrap_admin(
+def _should_promote_bootstrap_admin(
     *,
-    session: AsyncSession,
     user: User,
     bootstrap_admin_email: str | None,
 ) -> bool:
@@ -147,7 +145,19 @@ async def maybe_promote_bootstrap_admin(
         return False
     if bootstrap_admin_email is None:
         return False
-    if bootstrap_admin_email.strip().lower() != user.email.strip().lower():
+    return bootstrap_admin_email.strip().lower() == user.email.strip().lower()
+
+
+async def maybe_promote_bootstrap_admin_flush_only(
+    *,
+    session: AsyncSession,
+    user: User,
+    bootstrap_admin_email: str | None,
+) -> bool:
+    if not _should_promote_bootstrap_admin(
+        user=user,
+        bootstrap_admin_email=bootstrap_admin_email,
+    ):
         return False
 
     user.role = UserRole.admin

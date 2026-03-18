@@ -29,7 +29,7 @@ from agendable.services.auth_service import (
     AuthUserNotFoundError,
 )
 from agendable.services.auth_service import (
-    maybe_promote_bootstrap_admin as maybe_promote_bootstrap_admin_service,
+    maybe_promote_bootstrap_admin_flush_only as maybe_promote_bootstrap_admin_flush_only_service,
 )
 from agendable.settings import get_settings
 from agendable.sso.oidc.client import OidcClient
@@ -60,8 +60,8 @@ def is_bootstrap_admin_email(email: str) -> bool:
     return configured.strip().lower() == email.strip().lower()
 
 
-async def maybe_promote_bootstrap_admin(user: User, session: AsyncSession) -> bool:
-    return await maybe_promote_bootstrap_admin_service(
+async def maybe_promote_bootstrap_admin_flush_only(user: User, session: AsyncSession) -> bool:
+    return await maybe_promote_bootstrap_admin_flush_only_service(
         session=session,
         user=user,
         bootstrap_admin_email=get_settings().bootstrap_admin_email,

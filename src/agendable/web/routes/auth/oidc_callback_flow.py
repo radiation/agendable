@@ -156,7 +156,7 @@ async def handle_login_callback(
             link_mode=link_user_id is not None,
         )
 
-    await auth_routes.maybe_promote_bootstrap_admin(user, session)
+    await auth_routes.maybe_promote_bootstrap_admin_flush_only(user, session)
     await commit_oidc_session(session)
 
     request.session["user_id"] = str(user.id)

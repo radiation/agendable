@@ -227,12 +227,12 @@ async def create_series(
 async def series_detail(
     request: Request,
     series_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_user),
+    series_service: SeriesService = Depends(get_series_service),
 ) -> HTMLResponse:
     return await render_series_detail(
         request=request,
-        session=session,
+        series_service=series_service,
         series_id=series_id,
         current_user=current_user,
     )
@@ -247,7 +247,7 @@ async def add_series_attendee(
     current_user: User = Depends(require_user),
     series_service: SeriesService = Depends(get_series_service),
 ) -> Response:
-    await get_owned_series_or_404(session, series_id, current_user.id)
+    await get_owned_series_or_404(series_service, series_id, current_user.id)
 
     normalized_email = email.strip().lower()
     attendee_form = {"email": normalized_email}
@@ -258,14 +258,14 @@ async def add_series_attendee(
 
     attendee_user: User | None = None
     if not attendee_form_errors:
-        attendee_user = await resolve_series_attendee_user(session, normalized_email)
+        attendee_user = await resolve_series_attendee_user(series_service, normalized_email)
         if attendee_user is None:
             attendee_form_errors["email"] = "No user found with that email."
 
     if attendee_form_errors:
         return await render_series_detail(
             request=request,
-            session=session,
+            series_service=series_service,
             series_id=series_id,
             current_user=current_user,
             status_code=400,

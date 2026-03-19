@@ -34,7 +34,6 @@ from agendable.web.routes.occurrences.collab import (
     record_occurrence_activity,
 )
 from agendable.web.routes.occurrences.view_context import (
-    get_default_task_due_at,
     render_occurrence_detail,
     resolve_task_due_at,
     shared_panel_context,
@@ -49,13 +48,14 @@ async def occurrence_detail(
     request: Request,
     occurrence_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    occurrence_service: OccurrenceService = Depends(get_occurrence_service),
     current_user: User = Depends(require_user),
 ) -> HTMLResponse:
     occurrence, series = await get_accessible_occurrence(session, occurrence_id, current_user.id)
     mark_presence(occurrence_id=occurrence.id, user_id=current_user.id, now=datetime.now(UTC))
     return await render_occurrence_detail(
         request=request,
-        session=session,
+        occurrence_service=occurrence_service,
         occurrence=occurrence,
         series=series,
         current_user=current_user,
@@ -71,11 +71,12 @@ async def occurrence_shared_panel(
     request: Request,
     occurrence_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    occurrence_service: OccurrenceService = Depends(get_occurrence_service),
     current_user: User = Depends(require_user),
 ) -> HTMLResponse:
     occurrence, _ = await get_accessible_occurrence(session, occurrence_id, current_user.id)
     context = await shared_panel_context(
-        session=session,
+        occurrence_service=occurrence_service,
         occurrence=occurrence,
         current_user=current_user,
     )
@@ -114,7 +115,7 @@ async def create_task(
         task_form_errors["title"] = "Task title is required."
 
     final_due_at = await resolve_task_due_at(
-        session=session,
+        occurrence_service=occurrence_service,
         occurrence=occurrence,
         due_at_input=due_at_input,
         timezone=current_user.timezone,
@@ -124,7 +125,7 @@ async def create_task(
     final_assignee_id = assigned_user_id or current_user.id
     normalized_description = normalize_optional_text(description_input)
     await validate_task_assignee(
-        session=session,
+        occurrence_service=occurrence_service,
         occurrence_id=occurrence_id,
         series_owner_user_id=series.owner_user_id,
         assignee_id=final_assignee_id,
@@ -134,7 +135,7 @@ async def create_task(
     if task_form_errors:
         return await render_occurrence_detail(
             request=request,
-            session=session,
+            occurrence_service=occurrence_service,
             occurrence=occurrence,
             series=series,
             current_user=current_user,
@@ -205,7 +206,7 @@ async def add_attendee(
     if attendee_form_errors:
         return await render_occurrence_detail(
             request=request,
-            session=session,
+            occurrence_service=occurrence_service,
             occurrence=occurrence,
             series=series,
             current_user=current_user,
@@ -296,7 +297,7 @@ async def add_agenda_item(
     if not normalized_body:
         return await render_occurrence_detail(
             request=request,
-            session=session,
+            occurrence_service=occurrence_service,
             occurrence=occurrence,
             series=series,
             current_user=current_user,
@@ -350,7 +351,7 @@ async def convert_agenda_item_to_task(
 
     assignee_errors: dict[str, str] = {}
     await validate_task_assignee(
-        session=session,
+        occurrence_service=occurrence_service,
         occurrence_id=occurrence.id,
         series_owner_user_id=series.owner_user_id,
         assignee_id=assigned_user_id,
@@ -359,7 +360,7 @@ async def convert_agenda_item_to_task(
     if assignee_errors:
         raise HTTPException(status_code=400, detail=assignee_errors["assigned_user_id"])
 
-    due_at = await get_default_task_due_at(session, occurrence)
+    due_at = await occurrence_service.get_default_task_due_at(occurrence=occurrence)
     task = await occurrence_service.convert_agenda_item_to_task(
         item=item,
         occurrence=occurrence,

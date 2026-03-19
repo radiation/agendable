@@ -73,14 +73,13 @@ async def list_occurrence_attendee_users(
 
 async def validate_task_assignee(
     *,
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence_id: uuid.UUID,
     series_owner_user_id: uuid.UUID,
     assignee_id: uuid.UUID,
     task_form_errors: dict[str, str],
 ) -> None:
-    access_service = OccurrenceService.from_session(session)
-    exists = await access_service.assignee_exists(assignee_id=assignee_id)
+    exists = await occurrence_service.assignee_exists(assignee_id=assignee_id)
     if not exists:
         task_form_errors["assigned_user_id"] = "Choose a valid assignee."
         return
@@ -88,7 +87,7 @@ async def validate_task_assignee(
     if assignee_id == series_owner_user_id:
         return
 
-    attendee = await access_service.is_occurrence_attendee(
+    attendee = await occurrence_service.is_occurrence_attendee(
         occurrence_id=occurrence_id,
         user_id=assignee_id,
     )

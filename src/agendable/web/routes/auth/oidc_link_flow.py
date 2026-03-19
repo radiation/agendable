@@ -18,10 +18,10 @@ from agendable.security.audit_constants import (
 )
 from agendable.services.auth_service import AuthService
 from agendable.services.oidc_persistence_service import (
-    commit_oidc_session,
-    create_oidc_identity_if_needed,
+    commit_staged_oidc_changes,
     get_identity_for_provider_subject,
-    maybe_upsert_google_primary_connection,
+    stage_google_primary_connection_upsert,
+    stage_oidc_identity_if_needed,
 )
 from agendable.services.oidc_service import resolve_oidc_link_resolution
 from agendable.settings import Settings
@@ -156,7 +156,7 @@ async def _maybe_create_identity(
     sub: str,
     email: str,
 ) -> None:
-    await create_oidc_identity_if_needed(
+    await stage_oidc_identity_if_needed(
         session,
         user=link_user,
         create_identity=create_identity,
@@ -174,7 +174,7 @@ async def _maybe_upsert_google_calendar_connection(
     token_capture: OidcTokenCapture,
     settings: Settings,
 ) -> None:
-    await maybe_upsert_google_primary_connection(
+    await stage_google_primary_connection_upsert(
         session,
         user=link_user,
         allow_google_calendar_token_capture=allow_google_calendar_token_capture,
@@ -254,7 +254,7 @@ async def handle_link_callback(
         token_capture=token_capture,
         settings=settings,
     )
-    await commit_oidc_session(session)
+    await commit_staged_oidc_changes(session)
 
     clear_oidc_link_user_id(request)
     request.session["user_id"] = str(link_user.id)

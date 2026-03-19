@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil.rrule import rrulestr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agendable.db.models import AgendaItem, MeetingOccurrence, Task, User
+from agendable.datetime_utils import format_datetime_local_value
+from agendable.db.models import AgendaItem, MeetingOccurrence, MeetingSeries, Task, User
 from agendable.db.repos import (
     AgendaItemRepository,
     MeetingOccurrenceAttendeeRepository,
@@ -157,6 +158,109 @@ class OccurrenceService:
         )
         await self.occurrences.add(next_occurrence)
         return next_occurrence
+
+    async def get_owned_occurrence(
+        self,
+        *,
+        occurrence_id: uuid.UUID,
+        owner_user_id: uuid.UUID,
+    ) -> tuple[MeetingOccurrence | None, MeetingSeries | None]:
+        occurrence = await self.occurrences.get_by_id(occurrence_id)
+        if occurrence is None:
+            return None, None
+
+        series = await self.series.get_for_owner(occurrence.series_id, owner_user_id)
+        if series is None:
+            return None, None
+
+        return occurrence, series
+
+    async def get_accessible_occurrence(
+        self,
+        *,
+        occurrence_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> tuple[MeetingOccurrence | None, MeetingSeries | None]:
+        occurrence_with_series = await self.occurrences.get_occurrence_with_series_for_user(
+            occurrence_id=occurrence_id,
+            user_id=user_id,
+        )
+        if occurrence_with_series is None:
+            return None, None
+        return occurrence_with_series
+
+    async def list_occurrence_attendee_users(
+        self,
+        *,
+        occurrence_id: uuid.UUID,
+        current_user: User,
+    ) -> list[User]:
+        attendee_links = await self.attendees.list_for_occurrence_with_users(occurrence_id)
+
+        attendee_users = [current_user]
+        attendee_user_ids: set[uuid.UUID] = {current_user.id}
+        for link in attendee_links:
+            if link.user_id in attendee_user_ids:
+                continue
+            attendee_users.append(link.user)
+            attendee_user_ids.add(link.user_id)
+
+        return attendee_users
+
+    async def assignee_exists(
+        self,
+        *,
+        assignee_id: uuid.UUID,
+    ) -> bool:
+        assignee = await self.users.get_by_id(assignee_id)
+        return assignee is not None
+
+    async def is_occurrence_attendee(
+        self,
+        *,
+        occurrence_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> bool:
+        return await self.attendees.has_occurrence_user_link(
+            occurrence_id=occurrence_id,
+            user_id=user_id,
+        )
+
+    async def get_default_task_due_at(
+        self,
+        *,
+        occurrence: MeetingOccurrence,
+    ) -> datetime:
+        next_occurrence = await self.occurrences.get_next_for_series(
+            occurrence.series_id,
+            occurrence.scheduled_at,
+        )
+        if next_occurrence is not None:
+            return next_occurrence.scheduled_at
+        return occurrence.scheduled_at
+
+    async def task_due_default_value(
+        self,
+        *,
+        occurrence: MeetingOccurrence,
+        timezone: str,
+    ) -> str:
+        due_at = await self.get_default_task_due_at(occurrence=occurrence)
+        return format_datetime_local_value(due_at, timezone)
+
+    async def occurrence_collections(
+        self,
+        *,
+        occurrence: MeetingOccurrence,
+        current_user: User,
+    ) -> tuple[list[Task], list[AgendaItem], list[User]]:
+        tasks = await self.tasks.list_for_occurrence(occurrence.id)
+        agenda_items = await self.agenda_items.list_for_occurrence(occurrence.id)
+        attendee_users = await self.list_occurrence_attendee_users(
+            occurrence_id=occurrence.id,
+            current_user=current_user,
+        )
+        return tasks, agenda_items, attendee_users
 
     async def complete_occurrence_and_roll_forward(
         self,
@@ -425,3 +529,95 @@ async def toggle_agenda_item_done(
     item: AgendaItem,
 ) -> None:
     await OccurrenceService.from_session(session).toggle_agenda_item_done(item=item)
+
+
+async def get_owned_occurrence(
+    session: AsyncSession,
+    *,
+    occurrence_id: uuid.UUID,
+    owner_user_id: uuid.UUID,
+) -> tuple[MeetingOccurrence | None, MeetingSeries | None]:
+    return await OccurrenceService.from_session(session).get_owned_occurrence(
+        occurrence_id=occurrence_id,
+        owner_user_id=owner_user_id,
+    )
+
+
+async def get_accessible_occurrence(
+    session: AsyncSession,
+    *,
+    occurrence_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> tuple[MeetingOccurrence | None, MeetingSeries | None]:
+    return await OccurrenceService.from_session(session).get_accessible_occurrence(
+        occurrence_id=occurrence_id,
+        user_id=user_id,
+    )
+
+
+async def list_occurrence_attendee_users(
+    session: AsyncSession,
+    *,
+    occurrence_id: uuid.UUID,
+    current_user: User,
+) -> list[User]:
+    return await OccurrenceService.from_session(session).list_occurrence_attendee_users(
+        occurrence_id=occurrence_id,
+        current_user=current_user,
+    )
+
+
+async def assignee_exists(
+    session: AsyncSession,
+    *,
+    assignee_id: uuid.UUID,
+) -> bool:
+    return await OccurrenceService.from_session(session).assignee_exists(
+        assignee_id=assignee_id,
+    )
+
+
+async def is_occurrence_attendee(
+    session: AsyncSession,
+    *,
+    occurrence_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> bool:
+    return await OccurrenceService.from_session(session).is_occurrence_attendee(
+        occurrence_id=occurrence_id,
+        user_id=user_id,
+    )
+
+
+async def get_default_task_due_at(
+    session: AsyncSession,
+    *,
+    occurrence: MeetingOccurrence,
+) -> datetime:
+    return await OccurrenceService.from_session(session).get_default_task_due_at(
+        occurrence=occurrence,
+    )
+
+
+async def task_due_default_value(
+    session: AsyncSession,
+    *,
+    occurrence: MeetingOccurrence,
+    timezone: str,
+) -> str:
+    return await OccurrenceService.from_session(session).task_due_default_value(
+        occurrence=occurrence,
+        timezone=timezone,
+    )
+
+
+async def occurrence_collections(
+    session: AsyncSession,
+    *,
+    occurrence: MeetingOccurrence,
+    current_user: User,
+) -> tuple[list[Task], list[AgendaItem], list[User]]:
+    return await OccurrenceService.from_session(session).occurrence_collections(
+        occurrence=occurrence,
+        current_user=current_user,
+    )

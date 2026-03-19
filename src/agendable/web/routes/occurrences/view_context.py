@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import AgendaItem, MeetingOccurrence, MeetingSeries, Task, User
-from agendable.services import OccurrenceViewService
+from agendable.services import OccurrenceService
 from agendable.web.routes.common import (
     parse_dt_for_timezone,
     recurrence_label,
@@ -50,7 +50,7 @@ async def get_default_task_due_at(
     session: AsyncSession,
     occurrence: MeetingOccurrence,
 ) -> datetime:
-    return await OccurrenceViewService.from_session(session).get_default_task_due_at(
+    return await OccurrenceService.from_session(session).get_default_task_due_at(
         occurrence=occurrence,
     )
 
@@ -60,7 +60,7 @@ async def task_due_default_value(
     occurrence: MeetingOccurrence,
     timezone: str,
 ) -> str:
-    return await OccurrenceViewService.from_session(session).task_due_default_value(
+    return await OccurrenceService.from_session(session).task_due_default_value(
         occurrence=occurrence,
         timezone=timezone,
     )
@@ -71,7 +71,7 @@ async def occurrence_collections(
     occurrence: MeetingOccurrence,
     current_user: User,
 ) -> tuple[list[Task], list[AgendaItem], list[User]]:
-    return await OccurrenceViewService.from_session(session).occurrence_collections(
+    return await OccurrenceService.from_session(session).occurrence_collections(
         occurrence=occurrence,
         current_user=current_user,
     )

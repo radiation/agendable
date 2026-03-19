@@ -28,9 +28,9 @@ from agendable.security.audit_constants import (
 from agendable.services.auth_service import AuthService
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.oidc_persistence_service import (
-    commit_oidc_session,
-    create_oidc_identity_if_needed,
-    maybe_upsert_google_primary_connection,
+    commit_staged_oidc_changes,
+    stage_google_primary_connection_upsert,
+    stage_oidc_identity_if_needed,
 )
 from agendable.services.oidc_service import (
     OidcLoginResolution,
@@ -131,7 +131,7 @@ async def handle_login_callback(
         debug_oidc=debug_oidc,
     )
 
-    connection = await maybe_upsert_google_primary_connection(
+    connection = await stage_google_primary_connection_upsert(
         session,
         user=user,
         allow_google_calendar_token_capture=allow_google_calendar_token_capture,
@@ -157,7 +157,7 @@ async def handle_login_callback(
         )
 
     await auth_routes.maybe_promote_bootstrap_admin_flush_only(user, session)
-    await commit_oidc_session(session)
+    await commit_staged_oidc_changes(session)
 
     request.session["user_id"] = str(user.id)
     audit_oidc_success(
@@ -217,7 +217,7 @@ async def _create_login_identity_if_needed(
 ) -> None:
     if debug_oidc:
         logger.info("OIDC callback linking or creating SSO identity for email=%s", email)
-    await create_oidc_identity_if_needed(
+    await stage_oidc_identity_if_needed(
         session,
         user=user,
         create_identity=create_identity,

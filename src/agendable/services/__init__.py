@@ -17,9 +17,11 @@ from agendable.services.google_imported_series_service import (
     ImportedSeriesNotFoundError,
     MissingGoogleCalendarConnectionError,
 )
+from agendable.services.occurrence_access_service import OccurrenceAccessService
 from agendable.services.occurrence_service import (
     OccurrenceAgendaItemNotFoundError,
     OccurrenceNotFoundError,
+    OccurrenceService,
     OccurrenceTaskNotFoundError,
     add_agenda_item_for_occurrence,
     add_attendee_by_email,
@@ -31,6 +33,7 @@ from agendable.services.occurrence_service import (
     toggle_agenda_item_done,
     toggle_task_done,
 )
+from agendable.services.occurrence_view_service import OccurrenceViewService
 from agendable.services.oidc_service import (
     OidcLinkResolution,
     OidcLoginResolution,
@@ -53,9 +56,12 @@ __all__ = [
     "GoogleImportedSeriesService",
     "ImportedSeriesNotFoundError",
     "MissingGoogleCalendarConnectionError",
+    "OccurrenceAccessService",
     "OccurrenceAgendaItemNotFoundError",
     "OccurrenceNotFoundError",
+    "OccurrenceService",
     "OccurrenceTaskNotFoundError",
+    "OccurrenceViewService",
     "OidcLinkResolution",
     "OidcLoginResolution",
     "add_agenda_item_for_occurrence",

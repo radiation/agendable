@@ -18,7 +18,7 @@ from agendable.db.repos import (
     MeetingSeriesRepository,
 )
 from agendable.services.external_calendar_api import ExternalRecurringEventDetails
-from agendable.services.occurrence_service import complete_occurrence_and_roll_forward
+from agendable.services.occurrence_service import OccurrenceService
 
 
 class CalendarEventMappingService:
@@ -71,8 +71,7 @@ class CalendarEventMappingService:
         if mirror.external_status == "cancelled":
             if linked_occurrence is None:
                 return 0
-            await complete_occurrence_and_roll_forward(
-                self.session,
+            await OccurrenceService.from_session(self.session).complete_occurrence_and_roll_forward(
                 occurrence=linked_occurrence,
                 commit=False,
                 create_next_if_missing=True,

@@ -8,6 +8,7 @@ from agendable.auth import require_admin, require_user
 from agendable.db import get_session
 from agendable.db.models import User
 from agendable.db.repos import (
+    AgendaItemRepository,
     DashboardRepository,
     ExternalCalendarConnectionRepository,
     ExternalCalendarEventMirrorRepository,
@@ -15,6 +16,7 @@ from agendable.db.repos import (
     MeetingOccurrenceAttendeeRepository,
     MeetingOccurrenceRepository,
     MeetingSeriesRepository,
+    TaskRepository,
     UserRepository,
 )
 from agendable.services.admin_service import AdminService
@@ -24,6 +26,9 @@ from agendable.services.dashboard_service import DashboardService
 from agendable.services.google_calendar_client import GoogleCalendarHttpClient
 from agendable.services.google_calendar_sync_service import GoogleCalendarSyncService
 from agendable.services.google_imported_series_service import GoogleImportedSeriesService
+from agendable.services.occurrence_access_service import OccurrenceAccessService
+from agendable.services.occurrence_service import OccurrenceService
+from agendable.services.occurrence_view_service import OccurrenceViewService
 from agendable.services.series_service import SeriesService
 from agendable.settings import Settings, get_settings
 
@@ -158,6 +163,52 @@ def get_series_service(
     )
 
 
+def get_occurrence_service(
+    session: AsyncSession = Depends(get_session),
+    users: UserRepository = Depends(get_user_repo),
+    attendees: MeetingOccurrenceAttendeeRepository = Depends(get_meeting_occurrence_attendee_repo),
+    occurrences: MeetingOccurrenceRepository = Depends(get_meeting_occurrence_repo),
+    series: MeetingSeriesRepository = Depends(get_meeting_series_repo),
+) -> OccurrenceService:
+    return OccurrenceService(
+        session=session,
+        users=users,
+        attendees=attendees,
+        occurrences=occurrences,
+        series=series,
+        tasks=TaskRepository(session),
+        agenda_items=AgendaItemRepository(session),
+    )
+
+
+def get_occurrence_access_service(
+    session: AsyncSession = Depends(get_session),
+    users: UserRepository = Depends(get_user_repo),
+    attendees: MeetingOccurrenceAttendeeRepository = Depends(get_meeting_occurrence_attendee_repo),
+    occurrences: MeetingOccurrenceRepository = Depends(get_meeting_occurrence_repo),
+    series: MeetingSeriesRepository = Depends(get_meeting_series_repo),
+) -> OccurrenceAccessService:
+    return OccurrenceAccessService(
+        session=session,
+        users=users,
+        attendees=attendees,
+        occurrences=occurrences,
+        series=series,
+    )
+
+
+def get_occurrence_view_service(
+    session: AsyncSession = Depends(get_session),
+    access: OccurrenceAccessService = Depends(get_occurrence_access_service),
+) -> OccurrenceViewService:
+    return OccurrenceViewService(
+        access=access,
+        tasks=TaskRepository(session),
+        agenda_items=AgendaItemRepository(session),
+        occurrences=MeetingOccurrenceRepository(session),
+    )
+
+
 def get_google_imported_series_service(
     session: AsyncSession = Depends(get_session),
     series_repo: MeetingSeriesRepository = Depends(get_meeting_series_repo),
@@ -217,6 +268,9 @@ __all__ = [
     "get_meeting_occurrence_attendee_repo",
     "get_meeting_occurrence_repo",
     "get_meeting_series_repo",
+    "get_occurrence_access_service",
+    "get_occurrence_service",
+    "get_occurrence_view_service",
     "get_series_service",
     "get_session",
     "get_user_repo",

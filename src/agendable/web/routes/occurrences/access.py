@@ -10,19 +10,7 @@ from agendable.db.models import (
     MeetingSeries,
     User,
 )
-from agendable.services.occurrence_access_service import (
-    assignee_exists,
-    is_occurrence_attendee,
-)
-from agendable.services.occurrence_access_service import (
-    get_accessible_occurrence as get_accessible_occurrence_service,
-)
-from agendable.services.occurrence_access_service import (
-    get_owned_occurrence as get_owned_occurrence_service,
-)
-from agendable.services.occurrence_access_service import (
-    list_occurrence_attendee_users as list_occurrence_attendee_users_service,
-)
+from agendable.services import OccurrenceAccessService
 
 
 def ensure_occurrence_writable(occurrence_id: uuid.UUID, is_completed: bool) -> None:
@@ -47,8 +35,7 @@ async def get_owned_occurrence(
     occurrence_id: uuid.UUID,
     owner_user_id: uuid.UUID,
 ) -> tuple[MeetingOccurrence, MeetingSeries]:
-    occurrence, series = await get_owned_occurrence_service(
-        session,
+    occurrence, series = await OccurrenceAccessService.from_session(session).get_owned_occurrence(
         occurrence_id=occurrence_id,
         owner_user_id=owner_user_id,
     )
@@ -63,8 +50,9 @@ async def get_accessible_occurrence(
     occurrence_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> tuple[MeetingOccurrence, MeetingSeries]:
-    occurrence, series = await get_accessible_occurrence_service(
-        session,
+    occurrence, series = await OccurrenceAccessService.from_session(
+        session
+    ).get_accessible_occurrence(
         occurrence_id=occurrence_id,
         user_id=user_id,
     )
@@ -79,8 +67,7 @@ async def list_occurrence_attendee_users(
     occurrence_id: uuid.UUID,
     current_user: User,
 ) -> list[User]:
-    return await list_occurrence_attendee_users_service(
-        session,
+    return await OccurrenceAccessService.from_session(session).list_occurrence_attendee_users(
         occurrence_id=occurrence_id,
         current_user=current_user,
     )
@@ -94,7 +81,8 @@ async def validate_task_assignee(
     assignee_id: uuid.UUID,
     task_form_errors: dict[str, str],
 ) -> None:
-    exists = await assignee_exists(session, assignee_id=assignee_id)
+    access_service = OccurrenceAccessService.from_session(session)
+    exists = await access_service.assignee_exists(assignee_id=assignee_id)
     if not exists:
         task_form_errors["assigned_user_id"] = "Choose a valid assignee."
         return
@@ -102,8 +90,7 @@ async def validate_task_assignee(
     if assignee_id == series_owner_user_id:
         return
 
-    attendee = await is_occurrence_attendee(
-        session,
+    attendee = await access_service.is_occurrence_attendee(
         occurrence_id=occurrence_id,
         user_id=assignee_id,
     )

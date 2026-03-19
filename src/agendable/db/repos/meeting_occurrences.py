@@ -3,10 +3,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import MeetingOccurrence, MeetingOccurrenceAttendee, MeetingSeries
+from agendable.db.repos.access_predicates import (
+    attendee_matches_user_predicate,
+    visible_occurrence_for_user_predicate,
+)
 from agendable.db.repos.base import BaseRepository
 
 
@@ -69,14 +73,14 @@ class MeetingOccurrenceRepository(BaseRepository[MeetingOccurrence]):
                 MeetingOccurrenceAttendee,
                 and_(
                     MeetingOccurrenceAttendee.occurrence_id == MeetingOccurrence.id,
-                    MeetingOccurrenceAttendee.user_id == user_id,
+                    attendee_matches_user_predicate(user_id=user_id),
                 ),
             )
             .where(
                 MeetingOccurrence.id == occurrence_id,
-                or_(
-                    MeetingSeries.owner_user_id == user_id,
-                    MeetingOccurrenceAttendee.user_id.is_not(None),
+                visible_occurrence_for_user_predicate(
+                    user_id=user_id,
+                    attendee_user_match=MeetingOccurrenceAttendee.user_id.is_not(None),
                 ),
             )
             .limit(1)

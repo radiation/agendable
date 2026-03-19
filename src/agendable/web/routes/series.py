@@ -30,12 +30,10 @@ from agendable.web.routes.common import (
 from agendable.web.routes.series_helpers import (
     autocomplete_needle,
     build_normalized_rrule,
-    get_owned_series_or_404,
     normalize_recurrence_freq,
     parse_attendee_emails,
     parse_monthly_bymonthday,
     render_series_detail,
-    resolve_series_attendee_user,
     validate_create_series_inputs,
 )
 
@@ -221,7 +219,12 @@ async def add_series_attendee(
     current_user: User = Depends(require_user),
     series_service: SeriesService = Depends(get_series_service),
 ) -> Response:
-    await get_owned_series_or_404(series_service, series_id, current_user.id)
+    series = await series_service.get_owned_series(
+        series_id=series_id,
+        owner_user_id=current_user.id,
+    )
+    if series is None:
+        raise HTTPException(status_code=404)
 
     normalized_email = email.strip().lower()
     attendee_form = {"email": normalized_email}
@@ -232,7 +235,7 @@ async def add_series_attendee(
 
     attendee_user: User | None = None
     if not attendee_form_errors:
-        attendee_user = await resolve_series_attendee_user(series_service, normalized_email)
+        attendee_user = await series_service.resolve_attendee_user(email=normalized_email)
         if attendee_user is None:
             attendee_form_errors["email"] = "No user found with that email."
 

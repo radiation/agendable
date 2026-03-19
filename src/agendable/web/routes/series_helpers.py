@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from agendable.db.models import MeetingOccurrence, MeetingSeries, User
+from agendable.db.models import MeetingOccurrence, User
 from agendable.recurrence import build_rrule
 from agendable.services.series_service import SeriesService
 from agendable.web.routes.common import recurrence_label, templates
@@ -145,51 +145,4 @@ async def render_series_detail(
             "current_user": current_user,
         },
         status_code=status_code,
-    )
-
-
-async def get_owned_series_or_404(
-    series_service: SeriesService,
-    series_id: uuid.UUID,
-    owner_user_id: uuid.UUID,
-) -> MeetingSeries:
-    series = await series_service.get_owned_series(
-        series_id=series_id,
-        owner_user_id=owner_user_id,
-    )
-    if series is None:
-        raise HTTPException(status_code=404)
-    return series
-
-
-async def resolve_series_attendee_user(
-    series_service: SeriesService,
-    email: str,
-) -> User | None:
-    return await series_service.resolve_attendee_user(email=email)
-
-
-async def existing_attendee_occurrence_ids(
-    *,
-    series_service: SeriesService,
-    attendee_user_id: uuid.UUID,
-    occurrence_ids: list[uuid.UUID],
-) -> set[uuid.UUID]:
-    return await series_service.existing_attendee_occurrence_ids(
-        attendee_user_id=attendee_user_id,
-        occurrence_ids=occurrence_ids,
-    )
-
-
-async def add_missing_attendee_links(
-    *,
-    series_service: SeriesService,
-    attendee_user_id: uuid.UUID,
-    occurrence_ids: list[uuid.UUID],
-    existing_occurrence_ids: set[uuid.UUID],
-) -> int:
-    return await series_service.add_missing_attendee_links(
-        attendee_user_id=attendee_user_id,
-        occurrence_ids=occurrence_ids,
-        existing_occurrence_ids=existing_occurrence_ids,
     )

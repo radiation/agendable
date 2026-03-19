@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from agendable.services.series_service import SeriesService
 from agendable.testing.web_test_helpers import login_user
-from agendable.web.routes import series as series_routes
 
 
 @pytest.mark.asyncio
@@ -17,7 +17,7 @@ async def test_create_series_maps_service_value_error_to_bad_request(
     async def _raise_value_error(*args: object, **kwargs: object) -> tuple[object, list[object]]:
         raise ValueError("service rejected series")
 
-    monkeypatch.setattr(series_routes, "create_series_with_occurrences", _raise_value_error)
+    monkeypatch.setattr(SeriesService, "create_series_for_owner", _raise_value_error)
 
     resp = await client.post(
         "/series",

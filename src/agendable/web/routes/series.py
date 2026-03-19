@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from agendable.auth import require_user
-from agendable.db.models import MeetingOccurrence, MeetingSeries, User
+from agendable.db.models import User
 from agendable.dependencies import get_series_service, get_session
 from agendable.logging_config import log_with_fields
 from agendable.services.series_service import (
@@ -41,32 +41,6 @@ from agendable.web.routes.series_helpers import (
 
 router = APIRouter()
 logger = logging.getLogger("agendable.series")
-
-
-async def create_series_with_occurrences(
-    *,
-    series_service: SeriesService,
-    owner_user_id: uuid.UUID,
-    title: str,
-    reminder_minutes_before: int,
-    recurrence_rrule: str,
-    recurrence_dtstart: datetime,
-    recurrence_timezone: str,
-    generate_count: int,
-    attendee_emails: list[str],
-) -> tuple[MeetingSeries, list[MeetingOccurrence], set[uuid.UUID]]:
-    settings = get_settings()
-    return await series_service.create_series_for_owner(
-        owner_user_id=owner_user_id,
-        title=title,
-        reminder_minutes_before=reminder_minutes_before,
-        recurrence_rrule=recurrence_rrule,
-        recurrence_dtstart=recurrence_dtstart,
-        recurrence_timezone=recurrence_timezone,
-        generate_count=generate_count,
-        attendee_emails=attendee_emails,
-        settings=settings,
-    )
 
 
 @router.get("/", response_class=Response)
@@ -191,8 +165,7 @@ async def create_series(
 
     parsed_attendee_emails = parse_attendee_emails(attendee_emails)
     try:
-        series, occurrences, attendee_user_ids = await create_series_with_occurrences(
-            series_service=series_service,
+        series, occurrences, attendee_user_ids = await series_service.create_series_for_owner(
             owner_user_id=current_user.id,
             title=title,
             reminder_minutes_before=reminder_minutes_before,
@@ -201,6 +174,7 @@ async def create_series(
             recurrence_timezone=recurrence_timezone,
             generate_count=generate_count,
             attendee_emails=parsed_attendee_emails,
+            settings=get_settings(),
         )
     except UnknownAttendeeEmailsError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -61,26 +61,13 @@ class OccurrenceAccessService:
         occurrence_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> tuple[MeetingOccurrence | None, MeetingSeries | None]:
-        occurrence = await self.occurrences.get_by_id(occurrence_id)
-        if occurrence is None:
-            return None, None
-
-        owner_series = await self.series.get_for_owner(occurrence.series_id, user_id)
-        if owner_series is not None:
-            return occurrence, owner_series
-
-        has_attendee_link = await self.attendees.has_occurrence_user_link(
-            occurrence_id=occurrence.id,
+        occurrence_with_series = await self.occurrences.get_occurrence_with_series_for_user(
+            occurrence_id=occurrence_id,
             user_id=user_id,
         )
-        if not has_attendee_link:
+        if occurrence_with_series is None:
             return None, None
-
-        series = await self.series.get(occurrence.series_id)
-        if series is None:
-            return None, None
-
-        return occurrence, series
+        return occurrence_with_series
 
     async def list_occurrence_attendee_users(
         self,

@@ -47,6 +47,70 @@ class SeriesService:
     async def list_series_for_owner(self, owner_user_id: uuid.UUID) -> list[MeetingSeries]:
         return await self.series.list_for_owner(owner_user_id)
 
+    async def get_owned_series(
+        self,
+        *,
+        series_id: uuid.UUID,
+        owner_user_id: uuid.UUID,
+    ) -> MeetingSeries | None:
+        return await self.series.get_for_owner(series_id, owner_user_id)
+
+    async def list_series_occurrences(
+        self,
+        *,
+        series_id: uuid.UUID,
+    ) -> list[MeetingOccurrence]:
+        return await self.occurrences.list_for_series(series_id)
+
+    @staticmethod
+    def select_active_occurrence(
+        occurrences: list[MeetingOccurrence],
+        *,
+        now: datetime | None = None,
+    ) -> MeetingOccurrence | None:
+        active_now = now or datetime.now(UTC)
+        for occurrence in occurrences:
+            scheduled_at = occurrence.scheduled_at
+            if scheduled_at.tzinfo is None:
+                scheduled_at = scheduled_at.replace(tzinfo=UTC)
+            if scheduled_at >= active_now:
+                return occurrence
+
+        if occurrences:
+            return occurrences[-1]
+        return None
+
+    async def resolve_attendee_user(
+        self,
+        *,
+        email: str,
+    ) -> User | None:
+        return await self.users.get_by_email(email)
+
+    async def existing_attendee_occurrence_ids(
+        self,
+        *,
+        attendee_user_id: uuid.UUID,
+        occurrence_ids: list[uuid.UUID],
+    ) -> set[uuid.UUID]:
+        return await self.attendees.list_occurrence_ids_for_user(
+            user_id=attendee_user_id,
+            occurrence_ids=occurrence_ids,
+        )
+
+    async def add_missing_attendee_links(
+        self,
+        *,
+        attendee_user_id: uuid.UUID,
+        occurrence_ids: list[uuid.UUID],
+        existing_occurrence_ids: set[uuid.UUID],
+    ) -> int:
+        return await self.attendees.add_missing_links(
+            user_id=attendee_user_id,
+            occurrence_ids=occurrence_ids,
+            existing_occurrence_ids=existing_occurrence_ids,
+        )
+
     async def create_series_with_occurrences(
         self,
         *,

@@ -5,18 +5,9 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import AgendaItem, MeetingOccurrence, MeetingSeries, Task, User
-from agendable.services.occurrence_view_service import (
-    get_default_task_due_at as get_default_task_due_at_service,
-)
-from agendable.services.occurrence_view_service import (
-    occurrence_collections as occurrence_collections_service,
-)
-from agendable.services.occurrence_view_service import (
-    task_due_default_value as task_due_default_value_service,
-)
+from agendable.services import OccurrenceService
 from agendable.web.routes.common import (
     parse_dt_for_timezone,
     recurrence_label,
@@ -55,31 +46,31 @@ def _base_attendee_form() -> dict[str, str]:
 
 
 async def get_default_task_due_at(
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence: MeetingOccurrence,
 ) -> datetime:
-    return await get_default_task_due_at_service(session, occurrence=occurrence)
+    return await occurrence_service.get_default_task_due_at(
+        occurrence=occurrence,
+    )
 
 
 async def task_due_default_value(
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence: MeetingOccurrence,
     timezone: str,
 ) -> str:
-    return await task_due_default_value_service(
-        session,
+    return await occurrence_service.task_due_default_value(
         occurrence=occurrence,
         timezone=timezone,
     )
 
 
 async def occurrence_collections(
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence: MeetingOccurrence,
     current_user: User,
 ) -> tuple[list[Task], list[AgendaItem], list[User]]:
-    return await occurrence_collections_service(
-        session,
+    return await occurrence_service.occurrence_collections(
         occurrence=occurrence,
         current_user=current_user,
     )
@@ -87,7 +78,7 @@ async def occurrence_collections(
 
 async def shared_panel_context(
     *,
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence: MeetingOccurrence,
     current_user: User,
 ) -> dict[str, Any]:
@@ -98,7 +89,7 @@ async def shared_panel_context(
         now=now,
     )
     tasks, agenda_items, attendee_users = await occurrence_collections(
-        session,
+        occurrence_service,
         occurrence,
         current_user,
     )
@@ -161,13 +152,13 @@ def _merged_form(
 
 async def resolve_task_due_at(
     *,
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence: MeetingOccurrence,
     due_at_input: str | None,
     timezone: str,
     task_form_errors: dict[str, str],
 ) -> datetime:
-    final_due_at = await get_default_task_due_at(session, occurrence)
+    final_due_at = await get_default_task_due_at(occurrence_service, occurrence)
     if due_at_input is None or not due_at_input.strip():
         return final_due_at
 
@@ -180,7 +171,7 @@ async def resolve_task_due_at(
 
 async def occurrence_detail_context(
     *,
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence: MeetingOccurrence,
     series: MeetingSeries,
     current_user: User,
@@ -192,13 +183,13 @@ async def occurrence_detail_context(
     attendee_form_errors: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     task_due_default = await task_due_default_value(
-        session,
+        occurrence_service,
         occurrence,
         current_user.timezone,
     )
 
     tasks, agenda_items, attendee_users = await occurrence_collections(
-        session,
+        occurrence_service,
         occurrence,
         current_user,
     )
@@ -238,7 +229,7 @@ async def occurrence_detail_context(
 async def render_occurrence_detail(
     *,
     request: Request,
-    session: AsyncSession,
+    occurrence_service: OccurrenceService,
     occurrence: MeetingOccurrence,
     series: MeetingSeries,
     current_user: User,
@@ -251,7 +242,7 @@ async def render_occurrence_detail(
     attendee_form_errors: dict[str, str] | None = None,
 ) -> HTMLResponse:
     context = await occurrence_detail_context(
-        session=session,
+        occurrence_service=occurrence_service,
         occurrence=occurrence,
         series=series,
         current_user=current_user,

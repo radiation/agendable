@@ -5,11 +5,11 @@ import uuid
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 from fastapi import Depends, HTTPException, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db import get_session
 from agendable.db.models import User, UserRole
+from agendable.db.repos import UserRepository
 
 _password_hasher = PasswordHasher()
 
@@ -44,8 +44,7 @@ async def require_user(
     if user_id is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = await UserRepository(session).get_by_id(user_id)
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     if not user.is_active:

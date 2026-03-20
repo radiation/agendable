@@ -58,7 +58,7 @@ def is_email_allowed_for_domain(email: str, allowed_email_domain: str | None) ->
     return email.endswith(f"@{allowed}")
 
 
-async def provision_user_for_oidc(
+async def stage_user_provision_for_oidc(
     session: AsyncSession,
     *,
     email: str,
@@ -80,6 +80,23 @@ async def provision_user_for_oidc(
     session.add(user)
     await session.flush()
     return user
+
+
+async def provision_user_for_oidc(
+    session: AsyncSession,
+    *,
+    email: str,
+    userinfo: Mapping[str, object],
+    is_bootstrap_admin_email: Callable[[str], bool],
+    timezone: str | None = None,
+) -> User:
+    return await stage_user_provision_for_oidc(
+        session,
+        email=email,
+        userinfo=userinfo,
+        is_bootstrap_admin_email=is_bootstrap_admin_email,
+        timezone=timezone,
+    )
 
 
 def _normalize_provision_timezone(value: str | None) -> str:
@@ -160,7 +177,7 @@ async def resolve_oidc_login_resolution(
 
     user = await users.get_by_email(email)
     if user is None:
-        user = await provision_user_for_oidc(
+        user = await stage_user_provision_for_oidc(
             session,
             email=email,
             userinfo=userinfo,

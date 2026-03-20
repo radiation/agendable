@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agendable.db.models import (
@@ -12,6 +12,7 @@ from agendable.db.models import (
     MeetingOccurrence,
     MeetingSeries,
 )
+from agendable.db.repos.access_predicates import kept_or_local_series_predicate
 from agendable.db.repos.base import BaseRepository
 
 
@@ -24,10 +25,7 @@ class MeetingSeriesRepository(BaseRepository[MeetingSeries]):
             select(MeetingSeries)
             .where(
                 MeetingSeries.owner_user_id == owner_user_id,
-                or_(
-                    MeetingSeries.import_decision.is_(None),
-                    MeetingSeries.import_decision == ImportedSeriesDecision.kept,
-                ),
+                kept_or_local_series_predicate(),
             )
             .order_by(MeetingSeries.created_at.desc())
         )

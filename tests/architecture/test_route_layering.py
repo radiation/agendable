@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 ROUTES_ROOT = Path(__file__).resolve().parents[2] / "src" / "agendable" / "web" / "routes"
+AUTH_FILE = Path(__file__).resolve().parents[2] / "src" / "agendable" / "auth.py"
 SESSION_METHODS = {"execute", "commit", "flush", "add", "add_all"}
 
 
@@ -18,8 +19,10 @@ class Violation:
     message: str
 
 
-def _iter_route_files() -> list[Path]:
-    return sorted(path for path in ROUTES_ROOT.rglob("*.py") if path.is_file())
+def _iter_guarded_files() -> list[Path]:
+    files = [path for path in ROUTES_ROOT.rglob("*.py") if path.is_file()]
+    files.append(AUTH_FILE)
+    return sorted(files)
 
 
 def _annotation_contains_async_session(annotation: ast.expr | None) -> bool:
@@ -34,7 +37,11 @@ def _annotation_contains_async_session(annotation: ast.expr | None) -> bool:
     return False
 
 
-def _collect_violations(file_path: Path) -> list[Violation]:
+def _collect_violations(
+    file_path: Path,
+    *,
+    forbid_repo_instantiation: bool = True,
+) -> list[Violation]:
     source = file_path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(file_path))
 
@@ -73,7 +80,7 @@ def _collect_violations(file_path: Path) -> list[Violation]:
                     )
                 )
 
-            if func.attr.endswith("Repository"):
+            if forbid_repo_instantiation and func.attr.endswith("Repository"):
                 violations.append(
                     Violation(
                         file_path=file_path,
@@ -83,8 +90,10 @@ def _collect_violations(file_path: Path) -> list[Violation]:
                     )
                 )
 
-        if isinstance(func, ast.Name) and (
-            func.id.endswith("Repository") or func.id in imported_repo_names
+        if (
+            forbid_repo_instantiation
+            and isinstance(func, ast.Name)
+            and (func.id.endswith("Repository") or func.id in imported_repo_names)
         ):
             violations.append(
                 Violation(
@@ -164,8 +173,13 @@ def _collect_violations_from_source(source: str) -> list[Violation]:
 
 def test_route_layer_has_no_direct_db_or_repo_calls() -> None:
     all_violations: list[Violation] = []
-    for file_path in _iter_route_files():
-        all_violations.extend(_collect_violations(file_path))
+    for file_path in _iter_guarded_files():
+        all_violations.extend(
+            _collect_violations(
+                file_path,
+                forbid_repo_instantiation=file_path != AUTH_FILE,
+            )
+        )
 
     if all_violations:
         details = "\n".join(
@@ -173,8 +187,8 @@ def test_route_layer_has_no_direct_db_or_repo_calls() -> None:
             for violation in all_violations
         )
         raise AssertionError(
-            "Direct DB/repo usage detected in route modules. "
-            "Move DB access behind services/repositories and keep routes thin.\n"
+            "Direct DB/repo usage detected in route/auth modules. "
+            "Move DB access behind services/repositories and keep routes/auth thin.\n"
             f"{details}"
         )
 

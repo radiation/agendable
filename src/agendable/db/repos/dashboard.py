@@ -3,16 +3,20 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agendable.db.models import (
-    ImportedSeriesDecision,
     MeetingOccurrence,
     MeetingOccurrenceAttendee,
     MeetingSeries,
     Task,
+)
+from agendable.db.repos.access_predicates import (
+    attendee_matches_user_predicate,
+    kept_or_local_series_predicate,
+    visible_occurrence_for_user_predicate,
 )
 
 
@@ -41,14 +45,11 @@ class DashboardRepository:
                 MeetingOccurrenceAttendee.occurrence_id == MeetingOccurrence.id,
             )
             .where(
-                or_(
-                    MeetingSeries.owner_user_id == user_id,
-                    MeetingOccurrenceAttendee.user_id == user_id,
+                visible_occurrence_for_user_predicate(
+                    user_id=user_id,
+                    attendee_user_match=attendee_matches_user_predicate(user_id=user_id),
                 ),
-                or_(
-                    MeetingSeries.import_decision.is_(None),
-                    MeetingSeries.import_decision == ImportedSeriesDecision.kept,
-                ),
+                kept_or_local_series_predicate(),
                 MeetingOccurrence.scheduled_at >= now,
             )
             .distinct()
@@ -76,14 +77,11 @@ class DashboardRepository:
                 selectinload(Task.occurrence).selectinload(MeetingOccurrence.series),
             )
             .where(
-                or_(
-                    MeetingSeries.owner_user_id == user_id,
-                    MeetingOccurrenceAttendee.user_id == user_id,
+                visible_occurrence_for_user_predicate(
+                    user_id=user_id,
+                    attendee_user_match=attendee_matches_user_predicate(user_id=user_id),
                 ),
-                or_(
-                    MeetingSeries.import_decision.is_(None),
-                    MeetingSeries.import_decision == ImportedSeriesDecision.kept,
-                ),
+                kept_or_local_series_predicate(),
                 Task.is_done.is_(False),
             )
             .distinct()

@@ -5,22 +5,10 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from agendable.db.models import MeetingOccurrence, MeetingSeries, User
+from agendable.db.models import MeetingOccurrence, User
 from agendable.recurrence import build_rrule
-from agendable.services.series_view_service import (
-    add_missing_attendee_links as add_missing_attendee_links_service,
-)
-from agendable.services.series_view_service import (
-    existing_attendee_occurrence_ids as existing_attendee_occurrence_ids_service,
-)
-from agendable.services.series_view_service import (
-    get_owned_series,
-    list_series_occurrences,
-    resolve_attendee_user,
-    select_active_occurrence,
-)
+from agendable.services.series_service import SeriesService
 from agendable.web.routes.common import recurrence_label, templates
 
 VALID_RECURRENCE_FREQS = {"DAILY", "WEEKLY", "MONTHLY"}
@@ -115,23 +103,22 @@ def build_normalized_rrule(
 async def render_series_detail(
     *,
     request: Request,
-    session: AsyncSession,
+    series_service: SeriesService,
     series_id: uuid.UUID,
     current_user: User,
     status_code: int = 200,
     attendee_form: dict[str, str] | None = None,
     attendee_form_errors: dict[str, str] | None = None,
 ) -> HTMLResponse:
-    series = await get_owned_series(
-        session,
+    series = await series_service.get_owned_series(
         series_id=series_id,
         owner_user_id=current_user.id,
     )
     if series is None:
         raise HTTPException(status_code=404)
 
-    occurrences = await list_series_occurrences(session, series_id=series_id)
-    active_occurrence: MeetingOccurrence | None = select_active_occurrence(
+    occurrences = await series_service.list_series_occurrences(series_id=series_id)
+    active_occurrence: MeetingOccurrence | None = series_service.select_active_occurrence(
         occurrences,
         now=datetime.now(UTC),
     )
@@ -158,54 +145,4 @@ async def render_series_detail(
             "current_user": current_user,
         },
         status_code=status_code,
-    )
-
-
-async def get_owned_series_or_404(
-    session: AsyncSession,
-    series_id: uuid.UUID,
-    owner_user_id: uuid.UUID,
-) -> MeetingSeries:
-    series = await get_owned_series(
-        session,
-        series_id=series_id,
-        owner_user_id=owner_user_id,
-    )
-    if series is None:
-        raise HTTPException(status_code=404)
-    return series
-
-
-async def resolve_series_attendee_user(
-    session: AsyncSession,
-    email: str,
-) -> User | None:
-    return await resolve_attendee_user(session, email=email)
-
-
-async def existing_attendee_occurrence_ids(
-    *,
-    session: AsyncSession,
-    attendee_user_id: uuid.UUID,
-    occurrence_ids: list[uuid.UUID],
-) -> set[uuid.UUID]:
-    return await existing_attendee_occurrence_ids_service(
-        session,
-        attendee_user_id=attendee_user_id,
-        occurrence_ids=occurrence_ids,
-    )
-
-
-async def add_missing_attendee_links(
-    *,
-    session: AsyncSession,
-    attendee_user_id: uuid.UUID,
-    occurrence_ids: list[uuid.UUID],
-    existing_occurrence_ids: set[uuid.UUID],
-) -> int:
-    return await add_missing_attendee_links_service(
-        session,
-        attendee_user_id=attendee_user_id,
-        occurrence_ids=occurrence_ids,
-        existing_occurrence_ids=existing_occurrence_ids,
     )

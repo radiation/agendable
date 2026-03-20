@@ -3,10 +3,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agendable.db.models import MeetingOccurrence
+from agendable.db.models import MeetingOccurrence, MeetingOccurrenceAttendee, MeetingSeries
+from agendable.db.repos.access_predicates import (
+    attendee_matches_user_predicate,
+    visible_occurrence_for_user_predicate,
+)
 from agendable.db.repos.base import BaseRepository
 
 
@@ -55,3 +59,33 @@ class MeetingOccurrenceRepository(BaseRepository[MeetingOccurrence]):
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def get_occurrence_with_series_for_user(
+        self,
+        *,
+        occurrence_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> tuple[MeetingOccurrence, MeetingSeries] | None:
+        result = await self.session.execute(
+            select(MeetingOccurrence, MeetingSeries)
+            .join(MeetingSeries, MeetingOccurrence.series_id == MeetingSeries.id)
+            .outerjoin(
+                MeetingOccurrenceAttendee,
+                and_(
+                    MeetingOccurrenceAttendee.occurrence_id == MeetingOccurrence.id,
+                    attendee_matches_user_predicate(user_id=user_id),
+                ),
+            )
+            .where(
+                MeetingOccurrence.id == occurrence_id,
+                visible_occurrence_for_user_predicate(
+                    user_id=user_id,
+                    attendee_user_match=MeetingOccurrenceAttendee.user_id.is_not(None),
+                ),
+            )
+            .limit(1)
+        )
+        row = result.first()
+        if row is None:
+            return None
+        return row[0], row[1]

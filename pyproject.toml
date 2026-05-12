@@ -5,20 +5,20 @@ description = "Tasks and agenda tracking for recurring meetings"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-	"fastapi>=0.115",
-	"uvicorn[standard]>=0.30",
+	"fastapi>=0.136.1",
+	"uvicorn[standard]>=0.46.0",
 	"alembic>=1.13",
 	"jinja2>=3.1",
-	"python-multipart>=0.0.9",
+	"python-multipart>=0.0.28",
 	"itsdangerous>=2.2",
-	"sqlalchemy[asyncio]>=2.0",
+	"sqlalchemy[asyncio]>=2.0.49",
 	"aiosqlite>=0.20",
 	"asyncpg>=0.29",
-	"pydantic-settings>=2.2",
+	"pydantic-settings>=2.14.1",
 	"httpx>=0.27",
 	"python-dateutil>=2.9",
 	"argon2-cffi>=23.1.0",
-	"authlib>=1.3.0",
+	"authlib>=1.7.2",
 ]
 
 [project.scripts]
@@ -26,18 +26,18 @@ agendable = "agendable.cli:main"
 
 [dependency-groups]
 dev = [
-	"pre-commit>=3.7",
-	"pytest>=8.0",
+	"pre-commit>=4.6.0",
+	"pytest>=9.0.3",
 	"pytest-cov>=5.0",
 	"pytest-asyncio>=0.25.0",
-	"mypy>=1.10",
-	"ruff>=0.6",
+	"mypy>=2.1.0",
+	"ruff>=0.15.12",
 	"xenon>=0.9.3",
-	"types-python-dateutil>=2.9.0.20240316",
+	"types-python-dateutil>=2.9.0.20260508",
 ]
 
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.29.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

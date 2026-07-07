@@ -27,11 +27,11 @@ agendable = "agendable.cli:main"
 [dependency-groups]
 dev = [
 	"pre-commit>=4.6.0",
-	"pytest>=9.1.0",
+	"pytest>=9.1.1",
 	"pytest-cov>=5.0",
 	"pytest-asyncio>=1.4.0",
 	"mypy>=2.1.0",
-	"ruff>=0.15.17",
+	"ruff>=0.15.20",
 	"xenon>=0.9.3",
 	"types-python-dateutil>=2.9.0.20260518",
 ]
